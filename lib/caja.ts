@@ -171,14 +171,14 @@ export interface EstadosCaja {
   gastosOperativos: number  // SUM(EGRESOS) donde concepto NO empiece por "REVERSO"
   totalIngresos: number     // SUM(INGRESOS)
   totalEgresos: number      // SUM(EGRESOS)
-  recaudoTotal: number      // SUM(INGRESOS de "Pago Cuota%") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%")
+  recaudoTotal: number      // SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
 }
 
 /**
  * Calcula todos los estados de caja desde caja_central
  * ÚNICA FUNCIÓN PERMITIDA para calcular valores contables
  * 
- * REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%")
+ * REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
  * 
  * @returns EstadosCaja con disponible, gastosOperativos, totalIngresos, totalEgresos, recaudoTotal
  */
@@ -213,13 +213,14 @@ export async function calcularEstadosCaja(): Promise<EstadosCaja> {
       if (tipo === 'INGRESO') {
         totalIngresos += monto
         
-        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%"
+        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%", "MORA", "INSCRIP", y "ACTIVIDAD"
         const conceptoUpper = concepto.toUpperCase()
 
 if (
   conceptoUpper.includes('PAGO CUOTA') ||
   conceptoUpper.includes('MORA') ||
-  conceptoUpper.includes('INSCRIP')
+  conceptoUpper.includes('INSCRIP') ||
+  conceptoUpper.includes('PAGO ACTIVIDAD')
 ) {
   ingresosCuotas += monto
 }
@@ -234,13 +235,14 @@ if (
           gastosOperativos += monto
         }
         
-        // REGLA: Recaudo Total resta egresos de "REVERSO - Eliminación Cuota%"
+        // REGLA: Recaudo Total resta egresos de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", o "ACTIVIDAD"
         if (
           concepto.toUpperCase().includes('REVERSO') &&
           (
             concepto.toUpperCase().includes('CUOTA') ||
             concepto.toUpperCase().includes('MORA') ||
-            concepto.toUpperCase().includes('INSCRIP')
+            concepto.toUpperCase().includes('INSCRIP') ||
+            concepto.toUpperCase().includes('ACTIVIDAD')
           )
         ) {
           egresosReversosCuotas += monto
@@ -252,7 +254,7 @@ if (
     // Calcular disponible
     const disponible = totalIngresos - totalEgresos
     
-    // REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%")
+    // REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
     const recaudoTotal = ingresosCuotas - egresosReversosCuotas
     
     return {

@@ -432,7 +432,7 @@ export default function CajaPage() {
               ${(indicadores?.disponible || 0).toLocaleString()}
             </p>
             <p className="text-xs mt-2 text-gray-300">
-              Recaudo - Prestado + Abonos - Gastos
+              Recaudo + Actividades - Prestado + Abonos - Gastos
             </p>
           </div>
         </div>
