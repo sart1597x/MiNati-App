@@ -195,17 +195,22 @@ export async function retirarSocio(id: number | string): Promise<void> {
 
   // 1. Obtener información del socio
   const { data: socio, error: errorSocio } = await supabase
-    .from('asociados')
-    .select('id, nombre, cedula, estado')
-    .eq('id', socioId)
-    .single()
+  .from('asociados')
+  .select('id, nombre, cedula, activo')
+  .eq('id', socioId)
+  .maybeSingle()
 
-  if (errorSocio || !socio) {
-    throw new Error('Socio no encontrado')
-  }
+if (errorSocio) {
+  throw errorSocio
+}
+
+if (!socio) {
+  throw new Error(`Socio no encontrado (id=${socioId})`)
+}
+
 
   // Verificar que no esté ya retirado
-  if (socio.estado === 'RETIRADO') {
+  if (socio.activo === false) {
     throw new Error('El socio ya está retirado')
   }
 
@@ -282,10 +287,10 @@ export async function retirarSocio(id: number | string): Promise<void> {
   const { error: errorUpdate } = await supabase
     .from('asociados')
     .update({ 
-      estado: 'RETIRADO', 
       activo: false, 
       updated_at: new Date().toISOString() 
     })
+    
     .eq('id', socioId)
 
   if (errorUpdate) {

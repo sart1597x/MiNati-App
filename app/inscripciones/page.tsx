@@ -56,12 +56,11 @@ export default function InscripcionesPage() {
     return inscripciones.find(i => i.socio_id === socioId)
   }
 
-  const getCaritaColor = (estado: 'PAGADA' | 'PENDIENTE', estadoSocio?: string) => {
-    // Si el socio está retirado, mostrar gris
-    if (estadoSocio === 'RETIRADO') {
+  const getCaritaColor = (estado: 'PAGADA' | 'PENDIENTE', estaRetirado: boolean) => {
+    if (estaRetirado) {
       return 'bg-gray-400 cursor-not-allowed opacity-60'
     }
-    
+  
     switch (estado) {
       case 'PAGADA':
         return 'bg-green-500 hover:bg-green-600'
@@ -71,13 +70,13 @@ export default function InscripcionesPage() {
         return 'bg-gray-300'
     }
   }
+  
 
-  const getCaritaEmoji = (estado: 'PAGADA' | 'PENDIENTE', estadoSocio?: string) => {
-    // Si el socio está retirado, mostrar emoji gris
-    if (estadoSocio === 'RETIRADO') {
+  const getCaritaEmoji = (estado: 'PAGADA' | 'PENDIENTE', estaRetirado: boolean) => {
+    if (estaRetirado) {
       return '😶'
     }
-    
+  
     switch (estado) {
       case 'PAGADA':
         return '😊'
@@ -87,6 +86,7 @@ export default function InscripcionesPage() {
         return '⚪'
     }
   }
+  
 
   // Expandir socios por cupos y crear lista plana con índice
   const expandirSociosConIndice = () => {
@@ -409,6 +409,7 @@ export default function InscripcionesPage() {
                     const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : (item.socio.id || 0)
                     const inscripcion = getInscripcionSocio(socioId)
                     const estado = inscripcion?.estado || 'PENDIENTE'
+                    const estaRetirado = item.socio.activo === false
                     
                     return (
                       <div
@@ -423,12 +424,19 @@ export default function InscripcionesPage() {
                             {item.numeroFila}
                           </div>
                           <button
-                            onClick={() => handleCaritaClick(socioId)}
-                            className={`w-6 h-6 rounded-full ${getCaritaColor(estado as 'PAGADA' | 'PENDIENTE')} text-white flex items-center justify-center cursor-pointer transition-colors flex-shrink-0`}
-                            title={`Inscripción - ${estado === 'PAGADA' ? 'Pagada' : 'Pendiente'}`}
-                          >
-                            <span className="text-[10px]">{getCaritaEmoji(estado as 'PAGADA' | 'PENDIENTE')}</span>
-                          </button>
+  disabled={estaRetirado}
+  onClick={() => {
+    if (estaRetirado) return
+    handleCaritaClick(socioId)
+  }}
+  className={`w-6 h-6 rounded-full ${getCaritaColor(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${
+    estaRetirado ? 'cursor-not-allowed' : 'cursor-pointer'
+  }`}
+  title={estaRetirado ? 'Socio retirado' : `Inscripción - ${estado === 'PAGADA' ? 'Pagada' : 'Pendiente'}`}
+>
+  <span className="text-[10px]">{getCaritaEmoji(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)}</span>
+</button>
+
                         </div>
                       </div>
                     )
@@ -452,7 +460,8 @@ export default function InscripcionesPage() {
             return id === selectedInscripcion.socioId
           })
           const estaPagada = inscripcion?.estado === 'PAGADA'
-          const estaRetirado = socio?.estado === 'RETIRADO'
+          const estaRetirado = socio?.activo === false
+
           
           return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

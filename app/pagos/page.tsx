@@ -341,12 +341,14 @@ return {
     }
   }
 
-  const getCaritaColor = (estado: 'pagado' | 'pendiente' | 'mora', estadoSocio?: string) => {
-    // Si el socio está retirado, mostrar gris
-    if (estadoSocio === 'RETIRADO') {
+  const getCaritaColor = (
+    estado: 'pagado' | 'pendiente' | 'mora',
+    estaRetirado: boolean
+  ) => {
+    if (estaRetirado) {
       return 'bg-gray-400 cursor-not-allowed opacity-60'
     }
-    
+  
     switch (estado) {
       case 'pagado':
         return 'bg-green-500 hover:bg-green-600'
@@ -358,13 +360,16 @@ return {
         return 'bg-gray-300'
     }
   }
+  
 
-  const getCaritaEmoji = (estado: 'pagado' | 'pendiente' | 'mora', estadoSocio?: string) => {
-    // Si el socio está retirado, mostrar emoji gris
-    if (estadoSocio === 'RETIRADO') {
+  const getCaritaEmoji = (
+    estado: 'pagado' | 'pendiente' | 'mora',
+    estaRetirado: boolean
+  ) => {
+    if (estaRetirado) {
       return '😶'
     }
-    
+  
     switch (estado) {
       case 'pagado':
         return '😊'
@@ -376,6 +381,7 @@ return {
         return '⚪'
     }
   }
+  
 
   // Expandir socios por cupos y crear lista plana con índice
   const expandirSociosConIndice = () => {
@@ -551,8 +557,7 @@ return {
                     
                     const estadoCuota1 = getEstadoCuota(item.socio.cedula, cuotasDelMes[0], fechaReferencia1)
                     const estadoCuota2 = getEstadoCuota(item.socio.cedula, cuotasDelMes[1], fechaReferencia2)
-                    const estadoSocio = item.socio.estado
-                    const estaRetirado = estadoSocio === 'RETIRADO'
+                    const estaRetirado = item.socio.activo === false
                     
                     return (
                       <div
@@ -569,18 +574,18 @@ return {
                           <button
                             onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[0])}
                             disabled={estaRetirado}
-                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota1.estado, estadoSocio)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota1.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
                             title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[0]} - ${fechasVencimiento[cuotasDelMes[0] - 1].toLocaleDateString('es-ES')} - ${estadoCuota1.estado}`}
                           >
-                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota1.estado, estadoSocio)}</span>
+                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota1.estado, estaRetirado)}</span>
                           </button>
                           <button
                             onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[1])}
                             disabled={estaRetirado}
-                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota2.estado, estadoSocio)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota2.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
                             title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[1]} - ${fechasVencimiento[cuotasDelMes[1] - 1].toLocaleDateString('es-ES')} - ${estadoCuota2.estado}`}
                           >
-                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota2.estado, estadoSocio)}</span>
+                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota2.estado, estaRetirado)}</span>
                           </button>
                         </div>
                       </div>
