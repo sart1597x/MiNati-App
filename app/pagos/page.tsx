@@ -197,25 +197,37 @@ export default function PagosPage() {
     }
 
     // REGLA: Calcular días de mora usando floor((fechaPago - fechaVencimiento) / día)
-    const diffMs = fechaPagoNorm.getTime() - fechaVencNorm.getTime()
-    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
-    // Usar valores desde configuración (solo para visualización en UI)
-    const valorDiaMora = configuracion?.valor_dia_mora ?? VALOR_MORA_DIARIA_DEFAULT
-    const maxDiasMora = 15 // Mantener constante
-    const maxMontoMora = maxDiasMora * valorDiaMora // Calcular desde configuración
-    
-    // Aplicar fórmula: min(15, max(1, diffDias)) - Mínimo 1 día si hay mora
-    const diasMora = Math.min(maxDiasMora, Math.max(1, diffDias))
-    const montoMora = Math.min(maxMontoMora, diasMora * valorDiaMora)
+const diffMs = fechaPagoNorm.getTime() - fechaVencNorm.getTime()
+const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    // REGLA: Carita ROJA si hay mora (fechaPago > fechaVencimiento)
-    if (diasMora > 0) {
-      return {
-        estado: 'mora' as const,
-        montoMora
-      }
+// ✅ SI ES EL MISMO DÍA O ANTES → NO HAY MORA
+if (diffDias <= 0) {
+  if (pago?.pagado) {
+    return {
+      estado: 'pagado' as const,
+      montoMora: 0
     }
+  }
+
+  return {
+    estado: 'pendiente' as const,
+    montoMora: 0
+  }
+}
+
+// Usar valores desde configuración (solo para visualización en UI)
+const valorDiaMora = configuracion?.valor_dia_mora ?? VALOR_MORA_DIARIA_DEFAULT
+const maxDiasMora = 15
+const maxMontoMora = maxDiasMora * valorDiaMora
+
+// Solo aquí hay mora real
+const diasMora = Math.min(maxDiasMora, diffDias)
+const montoMora = Math.min(maxMontoMora, diasMora * valorDiaMora)
+
+return {
+  estado: 'mora' as const,
+  montoMora
+}
 
     // Sin mora
     if (pago?.pagado) {
