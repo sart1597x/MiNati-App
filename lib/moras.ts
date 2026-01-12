@@ -291,54 +291,23 @@ export async function registrarPagoMora(
     }
     
     if (estaCompletamentePagada) {
-      // REGLA: Si la mora está completamente pagada (resta <= 0), actualizar estado = 'pagada' y luego eliminar
-      console.log('✅ [PASO 1.6] Mora completamente pagada. Actualizando estado y eliminando de la tabla...')
-      
-      // Primero intentar actualizar con estado = 'pagada' si la columna existe
-      const datosUpdatePagada: any = {
-        valor_pagado: nuevoValorPagado,
-        resta: 0,
-        fecha_pago: fechaFormateadaMora,
-        estado: 'pagada' // REGLA: Actualizar estado = 'pagada' cuando resta = 0
-      }
-      
-      const { error: errorUpdateEstado } = await supabase
+      console.log('✅ [PASO 1.6] Mora completamente pagada. Se mantiene para historial (resta = 0)')
+    
+      const { error: errorUpdateMora } = await supabase
         .from('moras')
-        .update(datosUpdatePagada)
+        .update({
+          valor_pagado: nuevoValorPagado,
+          resta: 0,
+          fecha_pago: fechaFormateadaMora
+        })
         .eq('id', moraIdParaUpdate)
-      
-      // Si la columna estado no existe, intentar sin ella
-      if (errorUpdateEstado && (errorUpdateEstado.code === '42703' || errorUpdateEstado.message?.includes('column'))) {
-        console.log('⚠️ [PASO 1.6] Columna estado no existe, actualizando sin estado...')
-        const { error: errorUpdateSinEstado } = await supabase
-          .from('moras')
-          .update({
-            valor_pagado: nuevoValorPagado,
-            resta: 0,
-            fecha_pago: fechaFormateadaMora
-          })
-          .eq('id', moraIdParaUpdate)
-        
-        if (errorUpdateSinEstado) {
-          throw new Error(`Error actualizando mora pagada: ${errorUpdateSinEstado.message}`)
-        }
-      } else if (errorUpdateEstado) {
-        throw new Error(`Error actualizando mora pagada: ${errorUpdateEstado.message}`)
+    
+      if (errorUpdateMora) {
+        throw new Error(`Error actualizando mora pagada: ${errorUpdateMora.message}`)
       }
-      
-      // Luego eliminar la mora para que desaparezca de la lista
-      const { error: errorDeleteMora } = await supabase
-        .from('moras')
-        .delete()
-        .eq('id', moraIdParaUpdate)
-      
-      if (errorDeleteMora) {
-        console.warn('⚠️ [PASO 1.6] No se pudo eliminar mora pagada (ya está actualizada con resta = 0):', errorDeleteMora.message)
-        // No es crítico si no se puede eliminar - la mora ya tiene resta = 0 y no aparecerá en la lista
-      } else {
-        console.log('✅ [PASO 1.6] Mora completamente pagada actualizada y eliminada exitosamente')
-      }
-    } else {
+    }
+    else {
+    
       // Si aún queda saldo pendiente, actualizar los valores (valor_pagado, fecha_pago, resta)
       console.log('📝 [PASO 1.6] Actualizando mora con nuevo saldo pendiente...')
       

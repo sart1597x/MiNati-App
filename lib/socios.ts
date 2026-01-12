@@ -1,7 +1,6 @@
 import { supabase, Socio } from './supabase'
 import { crearMovimientoCaja, obtenerUltimoSaldo } from './caja'
 import { getPagosSocio } from './pagos'
-import { obtenerInscripciones } from './inscripciones'
 
 // Obtener todos los socios
 // REGLA: Mostrar todos los socios (los eliminados físicamente ya no existen)
@@ -188,11 +187,17 @@ export async function deleteSocio(id: number | string): Promise<void> {
 // REGLA: NO eliminar registros, solo marcar como estado='RETIRADO' y activo=false
 // Calcula: cuotas pagadas + inscripción (si pagada) = EGRESO en caja
 export async function retirarSocio(id: number | string): Promise<void> {
+  // Normalizar y validar el ID
+  const socioId = typeof id === 'string' ? parseInt(id, 10) : id
+  if (isNaN(socioId) || socioId <= 0) {
+    throw new Error('ID de socio inválido')
+  }
+
   // 1. Obtener información del socio
   const { data: socio, error: errorSocio } = await supabase
     .from('asociados')
     .select('id, nombre, cedula, estado')
-    .eq('id', id)
+    .eq('id', socioId)
     .single()
 
   if (errorSocio || !socio) {
@@ -203,8 +208,6 @@ export async function retirarSocio(id: number | string): Promise<void> {
   if (socio.estado === 'RETIRADO') {
     throw new Error('El socio ya está retirado')
   }
-
-  const socioId = typeof socio.id === 'string' ? parseInt(socio.id) : socio.id
 
   // 2. Calcular total de cuotas pagadas
   let totalCuotas = 0
@@ -218,12 +221,18 @@ export async function retirarSocio(id: number | string): Promise<void> {
   }
 
   // 3. Calcular valor de inscripción (si fue pagada)
+  // Consulta directa en lugar de obtenerInscripciones()
   let valorInscripcion = 0
   try {
-    const inscripciones = await obtenerInscripciones()
-    const inscripcion = inscripciones.find(i => i.socio_id === socioId && i.estado === 'PAGADA')
-    if (inscripcion) {
-      valorInscripcion = inscripcion.valor || 0
+    const { data: inscripcionesPagadas, error: errorInscripciones } = await supabase
+      .from('inscripciones')
+      .select('valor')
+      .eq('socio_id', socioId)
+      .eq('estado', 'PAGADA')
+
+    if (!errorInscripciones && inscripcionesPagadas && inscripcionesPagadas.length > 0) {
+      // Si hay múltiples inscripciones pagadas, tomar la primera
+      valorInscripcion = inscripcionesPagadas[0].valor || 0
     }
   } catch (error) {
     console.warn('Error obteniendo inscripción del socio (continuando):', error)
@@ -255,7 +264,21 @@ export async function retirarSocio(id: number | string): Promise<void> {
     }
   }
 
-  // 6. Marcar socio como RETIRADO
+  // 6. Marcar inscripciones como RETIRADA
+  try {
+    const { error: errorInscripciones } = await supabase
+      .from('inscripciones')
+      .update({ estado: 'RETIRADA' })
+      .eq('socio_id', socioId)
+
+    if (errorInscripciones) {
+      console.warn('Advertencia: Error marcando inscripciones como RETIRADA:', errorInscripciones)
+    }
+  } catch (error: any) {
+    console.warn('Advertencia: Error marcando inscripciones como RETIRADA (continuando):', error?.message)
+  }
+
+  // 7. Marcar socio como RETIRADO
   const { error: errorUpdate } = await supabase
     .from('asociados')
     .update({ 
@@ -263,7 +286,7 @@ export async function retirarSocio(id: number | string): Promise<void> {
       activo: false, 
       updated_at: new Date().toISOString() 
     })
-    .eq('id', id)
+    .eq('id', socioId)
 
   if (errorUpdate) {
     console.error('Error actualizando estado del socio:', errorUpdate)

@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { obtenerConfiguracionNacional } from './configuracion'
 import { crearMovimientoCaja, obtenerUltimoSaldo, actualizarMovimientoCaja, eliminarMovimientoCaja } from './caja'
 
-export type EstadoInscripcion = 'PENDIENTE' | 'PAGADA'
+export type EstadoInscripcion = 'PENDIENTE' | 'PAGADA' | 'RETIRADA'
 
 export interface Inscripcion {
   id: string
