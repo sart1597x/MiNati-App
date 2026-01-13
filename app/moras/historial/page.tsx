@@ -163,14 +163,13 @@ export default function HistorialMorasPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Asociado</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Valor Pagado</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Cuota</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Asociado ID</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {historial.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No hay registros de pagos de moras
                     </td>
                   </tr>
@@ -195,7 +194,6 @@ export default function HistorialMorasPage() {
                           ${valorDisplay.toLocaleString()}
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{pago.cuota_referencia || '-'}</td>
-                        <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{pago.asociado_id || '-'}</td>
                         <td className="px-4 py-4 text-sm">
                           <button
                             onClick={() => pagoId && handleEliminarMora(pagoId, pago.nombre_asociado || 'Asociado')}

@@ -171,14 +171,14 @@ export interface EstadosCaja {
   gastosOperativos: number  // SUM(EGRESOS) donde concepto NO empiece por "REVERSO"
   totalIngresos: number     // SUM(INGRESOS)
   totalEgresos: number      // SUM(EGRESOS)
-  recaudoTotal: number      // SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
+  recaudoTotal: number      // SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad", "Utilidad Inversión") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD", "Inversión –", "Utilidad Inversión" negativa)
 }
 
 /**
  * Calcula todos los estados de caja desde caja_central
  * ÚNICA FUNCIÓN PERMITIDA para calcular valores contables
  * 
- * REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
+ * REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad", "Utilidad Inversión") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD", "Inversión –", "Utilidad Inversión" negativa)
  * 
  * @returns EstadosCaja con disponible, gastosOperativos, totalIngresos, totalEgresos, recaudoTotal
  */
@@ -213,14 +213,16 @@ export async function calcularEstadosCaja(): Promise<EstadosCaja> {
       if (tipo === 'INGRESO') {
         totalIngresos += monto
         
-        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%", "MORA", "INSCRIP", y "ACTIVIDAD"
+        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%", "MORA", "INSCRIP", "PAGO ACTIVIDAD", "UTILIDAD INVERSIÓN", y "REVERSO - Eliminación Inversión"
         const conceptoUpper = concepto.toUpperCase()
 
 if (
   conceptoUpper.includes('PAGO CUOTA') ||
   conceptoUpper.includes('MORA') ||
   conceptoUpper.includes('INSCRIP') ||
-  conceptoUpper.includes('PAGO ACTIVIDAD')
+  conceptoUpper.includes('PAGO ACTIVIDAD') ||
+  conceptoUpper.includes('UTILIDAD INVERSIÓN') ||
+  (conceptoUpper.includes('REVERSO') && conceptoUpper.includes('ELIMINACIÓN INVERSIÓN'))
 ) {
   ingresosCuotas += monto
 }
@@ -229,21 +231,29 @@ if (
       else if (tipo === 'EGRESO') {
         totalEgresos += monto
         
-        // REGLA: Gastos operativos excluyen REVERSOS
-        // Los movimientos con concepto que empiece por "REVERSO" NO son gastos operativos
-        if (!concepto.toUpperCase().startsWith('REVERSO')) {
+        // REGLA: Gastos operativos excluyen REVERSOS e INVERSIONES
+        // Los movimientos con concepto que empiece por "REVERSO" o contenga "INVERSIÓN –" NO son gastos operativos
+        const conceptoUpperEgreso = concepto.toUpperCase()
+        if (!conceptoUpperEgreso.startsWith('REVERSO') && !conceptoUpperEgreso.includes('INVERSIÓN –')) {
           gastosOperativos += monto
         }
         
-        // REGLA: Recaudo Total resta egresos de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", o "ACTIVIDAD"
+        // REGLA: Recaudo Total resta egresos de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD", "INVERSIÓN", o "UTILIDAD INVERSIÓN"
         if (
-          concepto.toUpperCase().includes('REVERSO') &&
+          conceptoUpperEgreso.includes('REVERSO') &&
           (
-            concepto.toUpperCase().includes('CUOTA') ||
-            concepto.toUpperCase().includes('MORA') ||
-            concepto.toUpperCase().includes('INSCRIP') ||
-            concepto.toUpperCase().includes('ACTIVIDAD')
+            conceptoUpperEgreso.includes('CUOTA') ||
+            conceptoUpperEgreso.includes('MORA') ||
+            conceptoUpperEgreso.includes('INSCRIP') ||
+            conceptoUpperEgreso.includes('ACTIVIDAD') ||
+            conceptoUpperEgreso.includes('INVERSIÓN')
           )
+        ) {
+          egresosReversosCuotas += monto
+        } else if (
+          // Egresos directos de inversiones (no reversos)
+          conceptoUpperEgreso.includes('INVERSIÓN –') ||
+          (conceptoUpperEgreso.includes('UTILIDAD INVERSIÓN') && tipo === 'EGRESO')
         ) {
           egresosReversosCuotas += monto
         }
@@ -254,7 +264,7 @@ if (
     // Calcular disponible
     const disponible = totalIngresos - totalEgresos
     
-    // REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD")
+    // REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%", "MORA", "INSCRIP", "Pago Actividad", "Utilidad Inversión") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%", "MORA", "INSCRIP", "ACTIVIDAD", "Inversión –", "Utilidad Inversión" negativa)
     const recaudoTotal = ingresosCuotas - egresosReversosCuotas
     
     return {
@@ -411,6 +421,7 @@ export async function eliminarMovimientoCaja(movimientoId: number | string): Pro
 
 // Obtener solo los egresos (gastos)
 // IMPORTANTE: SELECT solo pide estas columnas exactas: id, tipo, concepto, monto, fecha, saldo_anterior, nuevo_saldo
+// REGLA: Las INVERSIONES NO son gastos y NO deben aparecer en el historial de gastos
 export async function obtenerGastosCaja(): Promise<MovimientoCaja[]> {
   try {
     const { data, error } = await supabase
@@ -434,8 +445,22 @@ export async function obtenerGastosCaja(): Promise<MovimientoCaja[]> {
       return []
     }
     
+    // FILTRAR INVERSIONES Y REVERSOS: NO son gastos
+    // Excluir movimientos con concepto que contenga:
+    // - "Inversión –" o "Utilidad Inversión –" (inversiones)
+    // - "REVERSO - Eliminación Pago Mora" (correcciones de pagos de mora)
+    // - "REVERSO - Eliminación Mora Cuota" (correcciones de eliminación de cuotas con mora)
+    const gastosFiltrados = data.filter((mov: any) => {
+      const concepto = String(mov.concepto || '').toUpperCase()
+      // Excluir inversiones, utilidades de inversión, y todos los REVERSOS (no son gastos)
+      return !concepto.includes('INVERSIÓN –') && 
+             !concepto.includes('UTILIDAD INVERSIÓN –') &&
+             !concepto.includes('REVERSO - ELIMINACIÓN PAGO MORA') &&
+             !concepto.includes('REVERSO - ELIMINACIÓN MORA CUOTA')
+    })
+    
     // Asegurar que todos los valores numéricos estén correctamente parseados
-    return data.map((mov: any) => ({
+    return gastosFiltrados.map((mov: any) => ({
       ...mov,
       monto: parseFloat(String(mov.monto || 0)) || 0,
       saldo_anterior: parseFloat(String(mov.saldo_anterior || 0)) || 0,

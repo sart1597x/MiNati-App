@@ -75,6 +75,14 @@ export default function DashboardPage() {
       href: '/actividades',
       color: 'from-purple-900 to-purple-800',
       hoverColor: 'hover:from-purple-800 hover:to-purple-700'
+    },
+    {
+      title: 'Inversiones',
+      description: 'Gestionar inversiones y reportar utilidades',
+      icon: DollarSign,
+      href: '/inversiones',
+      color: 'from-teal-900 to-teal-800',
+      hoverColor: 'hover:from-teal-800 hover:to-teal-700'
     }
   ]
 
