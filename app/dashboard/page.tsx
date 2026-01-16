@@ -1,9 +1,28 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Home, UserPlus, Receipt, AlertCircle, DollarSign, Wallet, LogOut, Calculator, Settings } from 'lucide-react'
 
 export default function DashboardPage() {
+  const [anioVigente, setAnioVigente] = useState<number | null>(null)
+
+
+  useEffect(() => {
+    const fetchAnio = async () => {
+      try {
+        const response = await fetch('/api/configuracion/anio')
+        const data = await response.json()
+        if (data.anio) {
+          setAnioVigente(data.anio)
+        }
+      } catch (error) {
+        console.error('Error obteniendo año vigente:', error)
+      }
+    }
+    fetchAnio()
+  }, [])
+
   const handleLogout = () => {
     if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
       // Aquí puedes agregar lógica de logout si es necesario
@@ -93,7 +112,8 @@ export default function DashboardPage() {
         <div className="mb-12 text-center relative">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Home className="w-12 h-12 text-white" />
-            <h1 className="text-5xl font-bold text-white">MiNati2026</h1>
+            <h1 className="text-5xl font-bold text-white">MiNati</h1>
+
           </div>
           <p className="text-xl text-gray-300">Panel de Control Principal</p>
           {/* Ícono de Configuración */}
@@ -143,4 +163,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-

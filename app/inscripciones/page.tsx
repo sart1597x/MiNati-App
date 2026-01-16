@@ -19,8 +19,6 @@ export default function InscripcionesPage() {
   const [whatsappSocio, setWhatsappSocio] = useState('')
   const [valorInscripcion, setValorInscripcion] = useState<number>(0)
 
-  const NUM_COLUMNAS = 6
-
   useEffect(() => {
     loadData()
   }, [])
@@ -102,27 +100,6 @@ export default function InscripcionesPage() {
     })
 
     return listaExpandida
-  }
-
-  // Distribuir socios en 6 columnas de forma balanceada
-  const distribuirEnColumnas = () => {
-    const listaExpandida = expandirSociosConIndice()
-    const totalSocios = listaExpandida.length
-    const sociosPorColumna = Math.floor(totalSocios / NUM_COLUMNAS)
-    const columnasExtra = totalSocios % NUM_COLUMNAS
-
-    const columnas: Array<Array<{ socio: Socio, cupoIndex: number, numeroFila: number }>> = []
-    let indiceActual = 0
-
-    for (let col = 0; col < NUM_COLUMNAS; col++) {
-      // Las primeras 'columnasExtra' columnas tendrán un socio más
-      const cantidadEnColumna = sociosPorColumna + (col < columnasExtra ? 1 : 0)
-      const columna = listaExpandida.slice(indiceActual, indiceActual + cantidadEnColumna)
-      columnas.push(columna)
-      indiceActual += cantidadEnColumna
-    }
-
-    return columnas
   }
 
   const handleCaritaClick = (socioId: number) => {
@@ -334,9 +311,7 @@ export default function InscripcionesPage() {
     )
   }
 
-  // Calcular distribución de columnas
-  const columnasDistribuidas = distribuirEnColumnas()
-  const maxFilas = Math.max(...columnasDistribuidas.map(col => col.length), 0)
+  const listaExpandida = expandirSociosConIndice()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-8">
@@ -382,73 +357,65 @@ export default function InscripcionesPage() {
           </div>
         </div>
 
-        {/* Tablero de Socios en 6 Columnas */}
+        {/* Tablero de Socios - Layout Vertical con CSS Grid */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 overflow-x-auto">
-          <div className="grid grid-cols-6 gap-3 min-w-max">
-            {columnasDistribuidas.map((columna, colIndex) => (
-              <div key={colIndex} className="flex flex-col min-w-[160px]">
-                {/* Header de columna */}
-                <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
-                    ASOCIADO
-                  </div>
-                  <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
-                    <div className="w-6 text-center">ID</div>
-                    <div className="w-6 text-center">INS</div>
-                  </div>
+          <div className="inline-block min-w-full">
+            {/* Header */}
+            <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10" style={{ display: 'grid', gridTemplateRows: 'repeat(1, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)' }}>
+              <div className="min-w-[160px]">
+                <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
+                  ASOCIADO
                 </div>
-
-                {/* Filas de la columna */}
-                <div className="space-y-0.5">
-                  {columna.map((item) => {
-                    const cantidadCupos = item.socio.cantidad_cupos || 1
-                    const nombreDisplay = cantidadCupos > 1 
-                      ? `${item.socio.nombre} ${item.cupoIndex + 1}`
-                      : item.socio.nombre
-                    
-                    const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : (item.socio.id || 0)
-                    const inscripcion = getInscripcionSocio(socioId)
-                    const estado = inscripcion?.estado || 'PENDIENTE'
-                    const estaRetirado = item.socio.activo === false
-                    
-                    return (
-                      <div
-                        key={`${item.socio.id}-${item.cupoIndex}`}
-                        className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px]"
-                      >
-                        <div className="font-medium text-gray-900 dark:text-white mb-0.5 truncate">
-                          {nombreDisplay}
-                        </div>
-                        <div className="flex gap-1 items-center">
-                          <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                            {item.numeroFila}
-                          </div>
-                          <button
-  disabled={estaRetirado}
-  onClick={() => {
-    if (estaRetirado) return
-    handleCaritaClick(socioId)
-  }}
-  className={`w-6 h-6 rounded-full ${getCaritaColor(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${
-    estaRetirado ? 'cursor-not-allowed' : 'cursor-pointer'
-  }`}
-  title={estaRetirado ? 'Socio retirado' : `Inscripción - ${estado === 'PAGADA' ? 'Pagada' : 'Pendiente'}`}
->
-  <span className="text-[10px]">{getCaritaEmoji(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)}</span>
-</button>
-
-                        </div>
-                      </div>
-                    )
-                  })}
-                  
-                  {/* Espaciador para mantener alineación si la columna tiene menos filas */}
-                  {Array.from({ length: maxFilas - columna.length }).map((_, index) => (
-                    <div key={`spacer-${index}`} className="h-10" />
-                  ))}
+                <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                  <div className="w-6 text-center">ID</div>
+                  <div className="w-6 text-center">INS</div>
                 </div>
               </div>
-            ))}
+            </div>
+            
+            {/* Lista de socios con CSS Grid - máximo 40 filas por columna */}
+            <div style={{ display: 'grid', gridTemplateRows: 'repeat(40, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)', gap: '0.125rem' }}>
+              {listaExpandida.map((item) => {
+                const cantidadCupos = item.socio.cantidad_cupos || 1
+                const nombreDisplay = cantidadCupos > 1 
+                  ? `${item.socio.nombre} ${item.cupoIndex + 1}`
+                  : item.socio.nombre
+                
+                const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : (item.socio.id || 0)
+                const inscripcion = getInscripcionSocio(socioId)
+                const estado = inscripcion?.estado || 'PENDIENTE'
+                const estaRetirado = item.socio.activo === false
+                
+                return (
+                  <div
+                    key={`${item.socio.id}-${item.cupoIndex}`}
+                    className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px] min-w-[160px]"
+                  >
+                    <div className="font-medium text-gray-900 dark:text-white mb-0.5 truncate">
+                      {nombreDisplay}
+                    </div>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
+                        {item.numeroFila}
+                      </div>
+                      <button
+                        disabled={estaRetirado}
+                        onClick={() => {
+                          if (estaRetirado) return
+                          handleCaritaClick(socioId)
+                        }}
+                        className={`w-6 h-6 rounded-full ${getCaritaColor(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${
+                          estaRetirado ? 'cursor-not-allowed' : 'cursor-pointer'
+                        }`}
+                        title={estaRetirado ? 'Socio retirado' : `Inscripción - ${estado === 'PAGADA' ? 'Pagada' : 'Pendiente'}`}
+                      >
+                        <span className="text-[10px]">{getCaritaEmoji(estado as 'PAGADA' | 'PENDIENTE', estaRetirado)}</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
 

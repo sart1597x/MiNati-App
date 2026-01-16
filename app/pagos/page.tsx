@@ -30,7 +30,6 @@ export default function PagosPage() {
   const [configuracion, setConfiguracion] = useState<{ valor_cuota: number; valor_dia_mora: number } | null>(null)
 
   const fechasVencimiento = generarFechasVencimiento()
-  const NUM_COLUMNAS = 6
   
   // Valores por defecto si no hay configuración
   const VALOR_CUOTA_DEFAULT = 30000
@@ -399,26 +398,6 @@ return {
     return listaExpandida
   }
 
-  // Distribuir socios en 6 columnas de forma balanceada
-  const distribuirEnColumnas = () => {
-    const listaExpandida = expandirSociosConIndice()
-    const totalSocios = listaExpandida.length
-    const sociosPorColumna = Math.floor(totalSocios / NUM_COLUMNAS)
-    const columnasExtra = totalSocios % NUM_COLUMNAS
-
-    const columnas: Array<Array<{ socio: Socio, cupoIndex: number, numeroFila: number }>> = []
-    let indiceActual = 0
-
-    for (let col = 0; col < NUM_COLUMNAS; col++) {
-      // Las primeras 'columnasExtra' columnas tendrán un socio más
-      const cantidadEnColumna = sociosPorColumna + (col < columnasExtra ? 1 : 0)
-      const columna = listaExpandida.slice(indiceActual, indiceActual + cantidadEnColumna)
-      columnas.push(columna)
-      indiceActual += cantidadEnColumna
-    }
-
-    return columnas
-  }
 
   if (loading) {
     return (
@@ -428,12 +407,7 @@ return {
     )
   }
 
-  // Esta variable se calcula dentro del modal, no es necesaria aquí
-  // const cuotaSeleccionada = selectedCuota ? getPagoSocio(selectedCuota.cedula, selectedCuota.numeroCuota) : null
-  
-  // Calcular distribución de columnas una sola vez
-  const columnasDistribuidas = distribuirEnColumnas()
-  const maxFilas = Math.max(...columnasDistribuidas.map(col => col.length), 0)
+  const listaExpandida = expandirSociosConIndice()
 
   const handleShareWhatsApp = () => {
     const url = window.location.href
@@ -520,85 +494,78 @@ return {
           </div>
         </div>
 
-        {/* Tablero de Socios en 6 Columnas */}
+        {/* Tablero de Socios - Layout Vertical con CSS Grid */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 overflow-x-auto">
-          <div className="grid grid-cols-6 gap-3 min-w-max">
-            {columnasDistribuidas.map((columna, colIndex) => (
-              <div key={colIndex} className="flex flex-col min-w-[160px]">
-                {/* Header de columna */}
-                <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
-                    ASOCIADO
-                  </div>
-                  <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
-                    <div className="w-6 text-center">ID</div>
-                    <div className="w-6 text-center">C1</div>
-                    <div className="w-6 text-center">C2</div>
-                  </div>
+          <div className="inline-block min-w-full">
+            {/* Header */}
+            <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10" style={{ display: 'grid', gridTemplateRows: 'repeat(1, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)' }}>
+              <div className="min-w-[160px]">
+                <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
+                  ASOCIADO
                 </div>
-
-                {/* Filas de la columna */}
-                <div className="space-y-0.5">
-                  {columna.map((item) => {
-                    const cantidadCupos = item.socio.cantidad_cupos || 1
-                    const nombreDisplay = cantidadCupos > 1 
-                      ? `${item.socio.nombre} ${item.cupoIndex + 1}`
-                      : item.socio.nombre
-                    
-                    // Usar fecha de hoy para calcular estado (si no hay pago, usa hoy; si hay pago, usa fecha del pago)
-                    const pago1 = getPagoSocio(item.socio.cedula, cuotasDelMes[0])
-                    const pago2 = getPagoSocio(item.socio.cedula, cuotasDelMes[1])
-                    const fechaReferencia1 = pago1?.fecha_pago 
-                      ? new Date(pago1.fecha_pago) 
-                      : new Date()
-                    const fechaReferencia2 = pago2?.fecha_pago 
-                      ? new Date(pago2.fecha_pago) 
-                      : new Date()
-                    
-                    const estadoCuota1 = getEstadoCuota(item.socio.cedula, cuotasDelMes[0], fechaReferencia1)
-                    const estadoCuota2 = getEstadoCuota(item.socio.cedula, cuotasDelMes[1], fechaReferencia2)
-                    const estaRetirado = item.socio.activo === false
-                    
-                    return (
-                      <div
-                        key={`${item.socio.id}-${item.cupoIndex}`}
-                        className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px]"
-                      >
-                        <div className={`font-medium mb-0.5 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
-                          {nombreDisplay}
-                        </div>
-                        <div className="flex gap-1 items-center">
-                          <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                            {item.numeroFila}
-                          </div>
-                          <button
-                            onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[0])}
-                            disabled={estaRetirado}
-                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota1.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
-                            title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[0]} - ${fechasVencimiento[cuotasDelMes[0] - 1].toLocaleDateString('es-ES')} - ${estadoCuota1.estado}`}
-                          >
-                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota1.estado, estaRetirado)}</span>
-                          </button>
-                          <button
-                            onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[1])}
-                            disabled={estaRetirado}
-                            className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota2.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
-                            title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[1]} - ${fechasVencimiento[cuotasDelMes[1] - 1].toLocaleDateString('es-ES')} - ${estadoCuota2.estado}`}
-                          >
-                            <span className="text-[10px]">{getCaritaEmoji(estadoCuota2.estado, estaRetirado)}</span>
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  
-                  {/* Espaciador para mantener alineación si la columna tiene menos filas */}
-                  {Array.from({ length: maxFilas - columna.length }).map((_, index) => (
-                    <div key={`spacer-${index}`} className="h-10" />
-                  ))}
+                <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                  <div className="w-6 text-center">ID</div>
+                  <div className="w-6 text-center">C1</div>
+                  <div className="w-6 text-center">C2</div>
                 </div>
               </div>
-            ))}
+            </div>
+            
+            {/* Lista de socios con CSS Grid - máximo 40 filas por columna */}
+            <div style={{ display: 'grid', gridTemplateRows: 'repeat(40, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)', gap: '0.125rem' }}>
+              {listaExpandida.map((item) => {
+                const cantidadCupos = item.socio.cantidad_cupos || 1
+                const nombreDisplay = cantidadCupos > 1 
+                  ? `${item.socio.nombre} ${item.cupoIndex + 1}`
+                  : item.socio.nombre
+                
+                // Usar fecha de hoy para calcular estado (si no hay pago, usa hoy; si hay pago, usa fecha del pago)
+                const pago1 = getPagoSocio(item.socio.cedula, cuotasDelMes[0])
+                const pago2 = getPagoSocio(item.socio.cedula, cuotasDelMes[1])
+                const fechaReferencia1 = pago1?.fecha_pago 
+                  ? new Date(pago1.fecha_pago) 
+                  : new Date()
+                const fechaReferencia2 = pago2?.fecha_pago 
+                  ? new Date(pago2.fecha_pago) 
+                  : new Date()
+                
+                const estadoCuota1 = getEstadoCuota(item.socio.cedula, cuotasDelMes[0], fechaReferencia1)
+                const estadoCuota2 = getEstadoCuota(item.socio.cedula, cuotasDelMes[1], fechaReferencia2)
+                const estaRetirado = item.socio.activo === false
+                
+                return (
+                  <div
+                    key={`${item.socio.id}-${item.cupoIndex}`}
+                    className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px] min-w-[160px]"
+                  >
+                    <div className={`font-medium mb-0.5 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                      {nombreDisplay}
+                    </div>
+                    <div className="flex gap-1 items-center">
+                      <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
+                        {item.numeroFila}
+                      </div>
+                      <button
+                        onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[0])}
+                        disabled={estaRetirado}
+                        className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota1.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                        title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[0]} - ${fechasVencimiento[cuotasDelMes[0] - 1].toLocaleDateString('es-ES')} - ${estadoCuota1.estado}`}
+                      >
+                        <span className="text-[10px]">{getCaritaEmoji(estadoCuota1.estado, estaRetirado)}</span>
+                      </button>
+                      <button
+                        onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[1])}
+                        disabled={estaRetirado}
+                        className={`w-6 h-6 rounded-full ${getCaritaColor(estadoCuota2.estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                        title={estaRetirado ? 'Socio retirado' : `Cuota ${cuotasDelMes[1]} - ${fechasVencimiento[cuotasDelMes[1] - 1].toLocaleDateString('es-ES')} - ${estadoCuota2.estado}`}
+                      >
+                        <span className="text-[10px]">{getCaritaEmoji(estadoCuota2.estado, estaRetirado)}</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
 

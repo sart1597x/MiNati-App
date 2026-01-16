@@ -33,42 +33,35 @@ export interface ConfiguracionNacional {
 export async function obtenerConfiguracionNacional(): Promise<ConfiguracionNacional | null> {
   try {
     const { data, error } = await supabase
-    .from('configuracion_natillera')
+      .from('configuracion_natillera')
       .select('*')
-      .eq('id', 1)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
-    
+
     if (error) {
-      // Si la tabla no existe, retornar null
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        console.warn('Tabla configuracion_nacional no existe')
-        return null
-      }
-      throw error
-    }
-    
-    if (!data) {
+      console.error('Error obteniendo configuración nacional:', error)
       return null
     }
-    
+
+    if (!data) return null
+
     return {
       id: data.id,
-      anio_vigente: Number(data.anio_vigente || new Date().getFullYear()),
-      valor_inscripcion: Number(data.valor_inscripcion || 10000),
-      valor_cuota: Number(data.valor_cuota || 30000),
-      valor_dia_mora: Number(data.valor_dia_mora || 3000),
-      porcentaje_administracion: Number(data.porcentaje_administracion || 8),
+      anio_vigente: Number(data.anio_vigente),
+      valor_inscripcion: Number(data.valor_inscripcion),
+      valor_cuota: Number(data.valor_cuota),
+      valor_dia_mora: Number(data.valor_dia_mora),
+      porcentaje_administracion: Number(data.porcentaje_administracion),
       created_at: data.created_at,
       updated_at: data.updated_at
     }
-  } catch (error: any) {
-    console.error('Error obteniendo configuración nacional:', error)
-    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
-      return null
-    }
-    throw error
+  } catch (error) {
+    console.error('Error crítico obteniendo configuración nacional:', error)
+    return null
   }
 }
+
 
 /**
  * Actualiza la configuración nacional (siempre id = 1)
@@ -77,84 +70,49 @@ export async function obtenerConfiguracionNacional(): Promise<ConfiguracionNacio
 export async function actualizarConfiguracionNacional(
   config: Omit<ConfiguracionNacional, 'id' | 'created_at' | 'updated_at'>
 ): Promise<ConfiguracionNacional> {
-  // Conversión estricta de todos los valores numéricos
-  const configNumerica = {
-    id: 1, // Siempre usar id = 1
-    anio_vigente: Number(config.anio_vigente || new Date().getFullYear()),
+
+  const datos = {
+    anio_vigente: Number(config.anio_vigente),
     valor_inscripcion: Number(config.valor_inscripcion),
     valor_cuota: Number(config.valor_cuota),
     valor_dia_mora: Number(config.valor_dia_mora),
     porcentaje_administracion: Number(config.porcentaje_administracion)
   }
-  
-  // Validar que todos los valores numéricos sean válidos
-  if (isNaN(configNumerica.anio_vigente) || 
-      isNaN(configNumerica.valor_inscripcion) || 
-      isNaN(configNumerica.valor_cuota) || 
-      isNaN(configNumerica.valor_dia_mora) || 
-      isNaN(configNumerica.porcentaje_administracion)) {
-    throw new Error('Todos los valores numéricos deben ser válidos')
+
+  // Validaciones básicas
+  if (
+    isNaN(datos.anio_vigente) ||
+    isNaN(datos.valor_inscripcion) ||
+    isNaN(datos.valor_cuota) ||
+    isNaN(datos.valor_dia_mora) ||
+    isNaN(datos.porcentaje_administracion)
+  ) {
+    throw new Error('Valores inválidos en configuración nacional')
   }
-  
-  // Intentar actualizar primero
-  const { data: updateData, error: updateError } = await supabase
-  .from('configuracion_natillera')
-    .update({
-      anio_vigente: configNumerica.anio_vigente,
-      valor_inscripcion: configNumerica.valor_inscripcion,
-      valor_cuota: configNumerica.valor_cuota,
-      valor_dia_mora: configNumerica.valor_dia_mora,
-      porcentaje_administracion: configNumerica.porcentaje_administracion
-    })
-    .eq('id', 1)
+
+  const { data, error } = await supabase
+    .from('configuracion_natillera')
+    .insert([datos])
     .select()
-    .maybeSingle()
-  
-  if (updateError) {
-    // Si no existe el registro, crearlo
-    if (updateError.code === 'PGRST116' || updateError.message?.includes('No rows')) {
-      const { data: insertData, error: insertError } = await supabase
-      .from('configuracion_natillera')
-        .insert([configNumerica])
-        .select()
-        .single()
-      
-      if (insertError) {
-        console.error('Error creando configuración nacional:', insertError)
-        throw insertError
-      }
-      
-      return {
-        id: insertData.id,
-        anio_vigente: Number(insertData.anio_vigente),
-        valor_inscripcion: Number(insertData.valor_inscripcion),
-        valor_cuota: Number(insertData.valor_cuota),
-        valor_dia_mora: Number(insertData.valor_dia_mora),
-        porcentaje_administracion: Number(insertData.porcentaje_administracion),
-        created_at: insertData.created_at,
-        updated_at: insertData.updated_at
-      }
-    }
-    
-    console.error('Error actualizando configuración nacional:', updateError)
-    throw updateError
+    .single()
+
+  if (error) {
+    console.error('Error insertando configuración nacional:', error)
+    throw error
   }
-  
-  if (!updateData) {
-    throw new Error('No se pudo actualizar la configuración nacional')
-  }
-  
+
   return {
-    id: updateData.id,
-    anio_vigente: Number(updateData.anio_vigente),
-    valor_inscripcion: Number(updateData.valor_inscripcion),
-    valor_cuota: Number(updateData.valor_cuota),
-    valor_dia_mora: Number(updateData.valor_dia_mora),
-    porcentaje_administracion: Number(updateData.porcentaje_administracion),
-    created_at: updateData.created_at,
-    updated_at: updateData.updated_at
+    id: data.id,
+    anio_vigente: Number(data.anio_vigente),
+    valor_inscripcion: Number(data.valor_inscripcion),
+    valor_cuota: Number(data.valor_cuota),
+    valor_dia_mora: Number(data.valor_dia_mora),
+    porcentaje_administracion: Number(data.porcentaje_administracion),
+    created_at: data.created_at,
+    updated_at: data.updated_at
   }
 }
+
 
 /**
  * Obtiene la configuración activa de la natillera
@@ -554,6 +512,20 @@ export async function eliminarConfiguracion(id: number | string): Promise<void> 
   if (error) {
     console.error('Error eliminando configuración:', error)
     throw error
+  }
+}
+
+/**
+ * Obtiene el año vigente desde la configuración activa
+ * Función server-side para usar en Server Components
+ */
+export async function obtenerAnioVigente(): Promise<number> {
+  try {
+    const configActiva = await obtenerConfiguracionActiva()
+    return configActiva?.anio_vigente || new Date().getFullYear()
+  } catch (error) {
+    console.warn('Error obteniendo año vigente, usando año actual:', error)
+    return new Date().getFullYear()
   }
 }
 

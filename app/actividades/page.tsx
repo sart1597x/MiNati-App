@@ -55,8 +55,6 @@ export default function ActividadesPage() {
   const [selectedCarita, setSelectedCarita] = useState<{ socioId: number, numeroCarita: number } | null>(null)
   const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0])
 
-  const NUM_COLUMNAS = 6
-
   useEffect(() => {
     loadData()
   }, [])
@@ -357,25 +355,6 @@ export default function ActividadesPage() {
     return listaExpandida
   }
 
-  // Distribuir socios en columnas
-  const distribuirEnColumnas = () => {
-    const listaExpandida = expandirSociosConIndice()
-    const totalSocios = listaExpandida.length
-    const sociosPorColumna = Math.floor(totalSocios / NUM_COLUMNAS)
-    const columnasExtra = totalSocios % NUM_COLUMNAS
-
-    const columnas: Array<Array<{ socio: Socio, cupoIndex: number, numeroFila: number }>> = []
-    let indiceActual = 0
-
-    for (let col = 0; col < NUM_COLUMNAS; col++) {
-      const cantidadEnColumna = sociosPorColumna + (col < columnasExtra ? 1 : 0)
-      const columna = listaExpandida.slice(indiceActual, indiceActual + cantidadEnColumna)
-      columnas.push(columna)
-      indiceActual += cantidadEnColumna
-    }
-
-    return columnas
-  }
 
   const handleShareWhatsApp = () => {
     if (!actividadSeleccionada) return
@@ -431,8 +410,6 @@ export default function ActividadesPage() {
 
   // VISTA DE LISTA DE ACTIVIDADES
   if (view === 'lista') {
-    const columnasDistribuidas = distribuirEnColumnas()
-    const maxFilas = Math.max(...columnasDistribuidas.map(col => col.length), 0)
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-8">
@@ -686,8 +663,7 @@ export default function ActividadesPage() {
 
   // VISTA DE TABLERO DE CARITAS (idéntico a cuotas)
   if (view === 'tablero' && actividadSeleccionada) {
-    const columnasDistribuidas = distribuirEnColumnas()
-    const maxFilas = Math.max(...columnasDistribuidas.map(col => col.length), 0)
+    const listaExpandida = expandirSociosConIndice()
     // Calcular el máximo de caritas por socio
     const maxCaritas = Math.max(...socios.map(s => {
       const socioId = typeof s.id === 'string' ? parseInt(s.id) : s.id
@@ -761,98 +737,91 @@ export default function ActividadesPage() {
             </div>
           </div>
 
-          {/* Tablero de Socios en 6 Columnas */}
+          {/* Tablero de Socios - Layout Vertical con CSS Grid */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 overflow-x-auto">
-            <div className="grid grid-cols-6 gap-3 min-w-max">
-              {columnasDistribuidas.map((columna, colIndex) => (
-                <div key={colIndex} className="flex flex-col min-w-[160px]">
-                  {/* Header de columna */}
-                  <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                    <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
-                      ASOCIADO
-                    </div>
-                    <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
-                      <div className="w-6 text-center">ID</div>
-                      {Array.from({ length: Math.min(maxCaritas, 5) }).map((_, i) => (
-                        <div key={i} className="w-6 text-center">C{i + 1}</div>
-                      ))}
-                      {maxCaritas > 5 && <div className="w-6 text-center">+</div>}
-                    </div>
+            <div className="inline-block min-w-full">
+              {/* Header */}
+              <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10" style={{ display: 'grid', gridTemplateRows: 'repeat(1, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)' }}>
+                <div className="min-w-[160px]">
+                  <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
+                    ASOCIADO
                   </div>
-
-                  {/* Filas de la columna */}
-                  <div className="space-y-0.5">
-                    {columna.map((item) => {
-                      const cantidadCupos = item.socio.cantidad_cupos || 1
-                      const nombreDisplay = cantidadCupos > 1 
-                        ? `${item.socio.nombre} ${item.cupoIndex + 1}`
-                        : item.socio.nombre
-                      
-                      const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : item.socio.id
-                      const estaRetirado = item.socio.activo === false
-                      
-                      // Obtener todas las caritas de este socio
-                      const caritasSocio = socioId ? getCaritasSocio(socioId) : []
-                      const cantidadCaritasSocio = Math.max(caritasSocio.length, actividadSeleccionada.cantidad || 1)
-                      
-                      return (
-                        <div
-                          key={`${item.socio.id}-${item.cupoIndex}`}
-                          className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px]"
-                        >
-                          <div className={`font-medium mb-0.5 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
-                            {nombreDisplay}
-                          </div>
-                          <div className="flex gap-1 items-center">
-                            <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                              {item.numeroFila}
-                            </div>
-                            {Array.from({ length: Math.min(cantidadCaritasSocio, 5) }).map((_, i) => {
-                              const numeroCarita = i + 1
-                              const estado = socioId ? getEstadoCarita(socioId, numeroCarita) : 'pendiente'
-                              return (
-                                <button
-                                  key={i}
-                                  onClick={() => !estaRetirado && socioId && handleCaritaClick(socioId, numeroCarita)}
-                                  disabled={estaRetirado}
-                                  className={`w-6 h-6 rounded-full ${getCaritaColor(estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
-                                  title={estaRetirado ? 'Socio retirado' : `Carita ${numeroCarita} - ${estado}`}
-                                >
-                                  <span className="text-[10px]">{getCaritaEmoji(estado, estaRetirado)}</span>
-                                </button>
-                              )
-                            })}
-                            {cantidadCaritasSocio > 5 && (
-                              <div className="w-6 text-center text-[10px] text-gray-600 dark:text-gray-400">
-                                +{cantidadCaritasSocio - 5}
-                              </div>
-                            )}
-                            {cantidadCaritasSocio === 0 && (
-                              <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] text-gray-400">
-                                ⚪
-                              </div>
-                            )}
-                            {!estaRetirado && socioId && (
-                              <button
-                                onClick={() => handleAgregarCarita(socioId)}
-                                className="w-6 h-6 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors flex-shrink-0 text-[10px]"
-                                title="Agregar carita"
-                              >
-                                +
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                    
-                    {/* Espaciador */}
-                    {Array.from({ length: maxFilas - columna.length }).map((_, index) => (
-                      <div key={`spacer-${index}`} className="h-10" />
+                  <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                    <div className="w-6 text-center">ID</div>
+                    {Array.from({ length: Math.min(maxCaritas, 5) }).map((_, i) => (
+                      <div key={i} className="w-6 text-center">C{i + 1}</div>
                     ))}
+                    {maxCaritas > 5 && <div className="w-6 text-center">+</div>}
                   </div>
                 </div>
-              ))}
+              </div>
+              
+              {/* Lista de socios con CSS Grid - máximo 40 filas por columna */}
+              <div style={{ display: 'grid', gridTemplateRows: 'repeat(40, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)', gap: '0.125rem' }}>
+                {listaExpandida.map((item) => {
+                  const cantidadCupos = item.socio.cantidad_cupos || 1
+                  const nombreDisplay = cantidadCupos > 1 
+                    ? `${item.socio.nombre} ${item.cupoIndex + 1}`
+                    : item.socio.nombre
+                  
+                  const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : item.socio.id
+                  const estaRetirado = item.socio.activo === false
+                  
+                  // Obtener todas las caritas de este socio
+                  const caritasSocio = socioId ? getCaritasSocio(socioId) : []
+                  const cantidadCaritasSocio = Math.max(caritasSocio.length, actividadSeleccionada.cantidad || 1)
+                  
+                  return (
+                    <div
+                      key={`${item.socio.id}-${item.cupoIndex}`}
+                      className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px] min-w-[160px]"
+                    >
+                      <div className={`font-medium mb-0.5 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                        {nombreDisplay}
+                      </div>
+                      <div className="flex gap-1 items-center">
+                        <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
+                          {item.numeroFila}
+                        </div>
+                        {Array.from({ length: Math.min(cantidadCaritasSocio, 5) }).map((_, i) => {
+                          const numeroCarita = i + 1
+                          const estado = socioId ? getEstadoCarita(socioId, numeroCarita) : 'pendiente'
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => !estaRetirado && socioId && handleCaritaClick(socioId, numeroCarita)}
+                              disabled={estaRetirado}
+                              className={`w-6 h-6 rounded-full ${getCaritaColor(estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                              title={estaRetirado ? 'Socio retirado' : `Carita ${numeroCarita} - ${estado}`}
+                            >
+                              <span className="text-[10px]">{getCaritaEmoji(estado, estaRetirado)}</span>
+                            </button>
+                          )
+                        })}
+                        {cantidadCaritasSocio > 5 && (
+                          <div className="w-6 text-center text-[10px] text-gray-600 dark:text-gray-400">
+                            +{cantidadCaritasSocio - 5}
+                          </div>
+                        )}
+                        {cantidadCaritasSocio === 0 && (
+                          <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] text-gray-400">
+                            ⚪
+                          </div>
+                        )}
+                        {!estaRetirado && socioId && (
+                          <button
+                            onClick={() => handleAgregarCarita(socioId)}
+                            className="w-6 h-6 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors flex-shrink-0 text-[10px]"
+                            title="Agregar carita"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
 

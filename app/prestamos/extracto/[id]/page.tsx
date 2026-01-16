@@ -43,6 +43,7 @@ export default function ExtractoPrestamoPage() {
   const params = useParams()
   const prestamoId = params.id as string
 
+  const [anioVigente, setAnioVigente] = useState<number>(new Date().getFullYear())
   const [prestamo, setPrestamo] = useState<Prestamo | null>(null)
   const [movimientos, setMovimientos] = useState<MovimientoCalculado[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +63,18 @@ export default function ExtractoPrestamoPage() {
   const [registrandoPago, setRegistrandoPago] = useState(false)
 
   useEffect(() => {
+    const fetchAnio = async () => {
+      try {
+        const response = await fetch('/api/configuracion/anio')
+        const data = await response.json()
+        if (data.anio) {
+          setAnioVigente(data.anio)
+        }
+      } catch (error) {
+        console.error('Error obteniendo año vigente:', error)
+      }
+    }
+    fetchAnio()
     loadData()
   }, [prestamoId])
 
@@ -504,7 +517,7 @@ export default function ExtractoPrestamoPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <span className="text-4xl">🐷</span>
-            <h1 className="text-4xl font-bold text-white">Minati2026</h1>
+            <h1 className="text-4xl font-bold text-white">MiNati</h1>
           </div>
           <div className="flex gap-3">
             <Link
