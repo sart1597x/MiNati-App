@@ -706,3 +706,22 @@ export async function obtenerTotalUtilidadActividades(): Promise<number> {
     throw error
   }
 }
+// ================================
+// TOTAL RECAUDO ACTIVIDADES
+// ================================
+export async function obtenerTotalRecaudoActividades(): Promise<number> {
+  const { data, error } = await supabase
+    .from('actividades_pagos')
+    .select('monto')
+
+  if (error) {
+    console.error('Error obteniendo recaudo de actividades:', error)
+    throw error
+  }
+
+  const total = (data || []).reduce((acc, row) => {
+    return acc + Number(row.monto || 0)
+  }, 0)
+
+  return total
+}

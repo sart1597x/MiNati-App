@@ -154,7 +154,11 @@ export default function ListaPrestamosPage() {
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">${prestamo.monto.toLocaleString()}</td>
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{((prestamo as any).tasa_interes || (prestamo as any).tasa || 0)}%</td>
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
-                        {new Date(prestamo.fecha_inicio).toLocaleDateString('es-ES')}
+                        {(() => {
+                          // Parsear fecha YYYY-MM-DD como local sin UTC
+                          const [y, m, d] = prestamo.fecha_inicio.split('-').map(Number)
+                          return new Date(y, m - 1, d).toLocaleDateString('es-ES')
+                        })()}
                       </td>
                       <td className="px-4 py-4 text-sm font-semibold text-gray-900 dark:text-white">
                         {loadingSaldos ? (

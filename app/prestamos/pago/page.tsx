@@ -10,7 +10,16 @@ export default function PagoPrestamoPage() {
   const [busqueda, setBusqueda] = useState('')
   const [prestamoSeleccionado, setPrestamoSeleccionado] = useState<Prestamo | null>(null)
   const [saldoPendiente, setSaldoPendiente] = useState(0)
-  const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0])
+  // Helper para obtener fecha local sin UTC
+  const getFechaLocalHoy = () => {
+    const hoy = new Date()
+    const year = hoy.getFullYear()
+    const month = String(hoy.getMonth() + 1).padStart(2, '0')
+    const day = String(hoy.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const [fechaPago, setFechaPago] = useState(getFechaLocalHoy())
   const [montoPago, setMontoPago] = useState('')
   const [tipoMovimiento, setTipoMovimiento] = useState<'pago_interes' | 'abono_capital'>('pago_interes')
   const [loading, setLoading] = useState(true)
@@ -102,7 +111,7 @@ export default function PagoPrestamoPage() {
       
       // Limpiar formulario
       setMontoPago('')
-      setFechaPago(new Date().toISOString().split('T')[0])
+      setFechaPago(getFechaLocalHoy())
       
       alert('Pago registrado exitosamente')
     } catch (error) {

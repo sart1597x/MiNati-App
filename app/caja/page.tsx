@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Home, ArrowLeft, Wallet, X, Plus, Database, FileText } from 'lucide-react'
-import { getAllPagos } from '@/lib/pagos'
+import { getAllPagos, obtenerTotalRecaudoCuotas } from '@/lib/pagos'
 import { obtenerTotalRecaudadoMoras } from '@/lib/moras'
-import { obtenerPrestamos } from '@/lib/prestamos'
-import { obtenerMovimientosPrestamo } from '@/lib/prestamos'
+import { obtenerPrestamos, obtenerMovimientosPrestamo, obtenerTotalRecaudadoIntereses, obtenerTotalCapitalPrestado, obtenerTotalAbonosCapital } from '@/lib/prestamos'
 import { supabase } from '@/lib/supabase'
 import { obtenerMovimientosCaja, obtenerSaldoTotal, crearMovimientoCaja, obtenerUltimoSaldo, MovimientoCaja, calcularEstadosCaja } from '@/lib/caja'
 import { obtenerConfiguracionNacional } from '@/lib/configuracion'
 import { obtenerResumenInscripciones } from '@/lib/inscripciones'
+import { obtenerTotalRecaudoActividades } from '@/lib/actividades'
+import { obtenerTotalInversiones, obtenerTotalUtilidadInversiones } from '@/lib/inversiones'
 
 interface IndicadoresCaja {
   recaudoTotal: number
@@ -38,6 +39,7 @@ export default function CajaPage() {
   const [movimientosCaja, setMovimientosCaja] = useState<MovimientoCaja[]>([])
   const [saldoCaja, setSaldoCaja] = useState<number>(0)
   const [loading, setLoading] = useState(true)
+  const [loadingDatosSecundarios, setLoadingDatosSecundarios] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
   const [formGasto, setFormGasto] = useState({
     fecha: new Date().toISOString().split('T')[0],
@@ -56,7 +58,8 @@ export default function CajaPage() {
     loadData()
   }, [])
 
-  const loadData = async () => {
+  // FASE 1: Carga rápida - Solo datos esenciales para renderizar UI
+  const loadDataFase1 = async () => {
     try {
       setLoading(true)
       let valorCuotaUsar = 30000
@@ -64,89 +67,145 @@ export default function CajaPage() {
       // Cargar configuración nacional para obtener valor_cuota
       try {
         const config = await obtenerConfiguracionNacional()
-        
-
         if (config && config.valor_cuota) {
           valorCuotaUsar = config.valor_cuota
           setValorCuotaConfig(config.valor_cuota)
         } else {
           setValorCuotaConfig(30000)
         }
-        
       } catch (error) {
         console.warn('Error cargando configuración, usando valor por defecto:', error)
         setValorCuotaConfig(30000)
       }
       
-      // Obtener saldo de caja_central con manejo robusto de errores
+      // Obtener saldo de caja_central (rápido)
       let saldoCajaCentral = 0
-      let movimientos: MovimientoCaja[] = []
-      
       try {
-        // Obtener saldo total (usa nuevo_saldo del último registro o suma matemática)
         saldoCajaCentral = await obtenerSaldoTotal()
-        // Asegurar que sea un número válido (no null/undefined/NaN)
         saldoCajaCentral = isNaN(saldoCajaCentral) ? 0 : saldoCajaCentral
         setSaldoCaja(saldoCajaCentral)
-        
-        // Obtener movimientos de caja
-        movimientos = await obtenerMovimientosCaja()
-        // Asegurar que sea un array válido
-        setMovimientosCaja(Array.isArray(movimientos) ? movimientos : [])
-        
-        console.log('✅ Datos de caja cargados:', {
-          saldoCajaCentral,
-          cantidadMovimientos: movimientos.length
-        })
       } catch (e: any) {
-        // Si falla la base de datos, mostrar 'Sin movimientos' en lugar de romperse
-        console.warn('⚠️ Error obteniendo datos de caja_central (continuando con valores por defecto):', e?.message)
+        console.warn('⚠️ Error obteniendo saldo de caja:', e?.message)
         setSaldoCaja(0)
+      }
+      
+      // Inicializar indicadores en 0 (se actualizarán en Fase 2)
+      setIndicadores({
+        recaudoTotal: 0,
+        capitalPrestado: 0,
+        abonosCapital: 0,
+        gastos: 0,
+        disponible: 0
+      })
+      
+      // Inicializar arrays vacíos (se llenarán en Fase 2)
+      setMovimientosCaja([])
+      setCuotasPorMes([])
+      setResumenInscripciones({ cantidad: 0, valorTotal: 0 })
+      
+    } catch (error: any) {
+      console.error('❌ Error crítico en Fase 1:', error)
+      setSaldoCaja(0)
+      setMovimientosCaja([])
+      setIndicadores({
+        recaudoTotal: 0,
+        capitalPrestado: 0,
+        abonosCapital: 0,
+        gastos: 0,
+        disponible: 0
+      })
+      setCuotasPorMes([])
+      setResumenInscripciones({ cantidad: 0, valorTotal: 0 })
+    } finally {
+      // IMPORTANTE: Renderizar UI lo antes posible
+      setLoading(false)
+    }
+  }
+
+  // FASE 2: Carga pesada - Datos secundarios y cálculos complejos
+  const loadDataFase2 = async () => {
+    try {
+      setLoadingDatosSecundarios(true)
+      
+      // Obtener movimientos de caja (pesado)
+      let movimientos: MovimientoCaja[] = []
+      try {
+        movimientos = await obtenerMovimientosCaja()
+        setMovimientosCaja(Array.isArray(movimientos) ? movimientos : [])
+      } catch (e: any) {
+        console.warn('⚠️ Error obteniendo movimientos de caja:', e?.message)
         setMovimientosCaja([])
-        // NO lanzar el error, continuar con el resto de la carga
       }
       
-      // Obtener pagos solo para mostrar cuotas por mes (NO para calcular recaudo)
-      // REGLA: El recaudo total ahora se calcula desde caja_central únicamente
+      // Obtener pagos y préstamos en paralelo (pesados)
       let pagos: any[] = []
-      try {
-        pagos = await getAllPagos()
-      } catch (e: any) {
-        console.error('Error obteniendo pagos:', e)
-        pagos = []
-      }
-      
-      // Obtener préstamos solo para calcular capital prestado (NO para calcular recaudo)
-      // REGLA: El recaudo total ahora se calcula desde caja_central únicamente
       let prestamos: any[] = []
-      let abonosCapital = 0
-      
       try {
-        prestamos = await obtenerPrestamos()
-        for (const prestamo of (Array.isArray(prestamos) ? prestamos : [])) {
-          if (prestamo?.id) {
-            try {
-              const movimientos = await obtenerMovimientosPrestamo(prestamo.id)
-              for (const mov of (Array.isArray(movimientos) ? movimientos : [])) {
-                if (mov?.tipo_movimiento !== 'desembolso') {
-                  const abono = parseFloat(String(mov?.abono_capital || 0)) || 0
-                  abonosCapital += isNaN(abono) ? 0 : abono
-                }
-              }
-            } catch (e: any) {
-              if (e?.code !== '42P01' && e?.code !== '42703') {
-                console.error('Error obteniendo movimientos de préstamo:', e)
-              }
-            }
-          }
-        }
+        [pagos, prestamos] = await Promise.all([
+          getAllPagos().catch(() => []),
+          obtenerPrestamos().catch(() => [])
+        ])
       } catch (e: any) {
-        console.error('Error obteniendo préstamos:', e)
-        prestamos = []
+        console.error('Error obteniendo pagos/préstamos:', e)
       }
       
-      // REGLA OBLIGATORIA: Calcular TODO desde caja_central usando función centralizada
-      // NO usar acumulados guardados ni cálculos manuales
+      // Obtener valor de cuota desde estado (ya cargado en Fase 1)
+      const valorCuotaUsar = valorCuotaConfig
+      
+      // REGLA OBLIGATORIA: Calcular TODO usando variables locales
+      // NO usar valores de useState para cálculos
+      
+      // 1️⃣ Declarar variables locales para totales
+      let totalCuotas = 0
+      let totalMoras = 0
+      let totalActividades = 0
+      let totalInscripciones = 0
+      let totalUtilidadInversiones = 0
+      let totalInteresesPrestamos = 0
+      let totalCapitalPrestado = 0
+      let totalAbonosCapital = 0
+      let totalInversiones = 0
+      
+      // 2️⃣ Asignar valores reales usando funciones existentes (en paralelo)
+      let resumenInscripcionesResult: { cantidad: number; valorTotal: number } | null = null
+      try {
+        const [
+          recaudoCuotas,
+          totalInversionesResult,
+          totalMorasResult,
+          totalActividadesResult,
+          resumenInscripcionesTemp,
+          totalUtilidadInversionesResult,
+          totalInteresesPrestamosResult,
+          totalCapitalPrestadoResult,
+          totalAbonosCapitalResult
+        ] = await Promise.all([
+          obtenerTotalRecaudoCuotas(),
+          obtenerTotalInversiones(),
+          obtenerTotalRecaudadoMoras(),
+          obtenerTotalRecaudoActividades(),
+          obtenerResumenInscripciones(),
+          obtenerTotalUtilidadInversiones(),
+          obtenerTotalRecaudadoIntereses(),
+          obtenerTotalCapitalPrestado(),
+          obtenerTotalAbonosCapital()
+        ])
+
+        totalCuotas = recaudoCuotas?.valorTotal || 0
+        totalInversiones = totalInversionesResult || 0
+        totalMoras = totalMorasResult || 0
+        totalActividades = totalActividadesResult || 0
+        resumenInscripcionesResult = resumenInscripcionesTemp
+        totalInscripciones = resumenInscripcionesResult?.valorTotal || 0
+        totalUtilidadInversiones = totalUtilidadInversionesResult || 0
+        totalInteresesPrestamos = totalInteresesPrestamosResult || 0
+        totalCapitalPrestado = totalCapitalPrestadoResult || 0
+        totalAbonosCapital = totalAbonosCapitalResult || 0
+      } catch (e: any) {
+        console.error('Error obteniendo totales de caja:', e)
+      }
+      
+      // Obtener gastos operativos desde calcularEstadosCaja (pesado)
       let estadosCaja: { disponible: number; gastosOperativos: number; totalIngresos: number; totalEgresos: number; recaudoTotal: number }
       try {
         estadosCaja = await calcularEstadosCaja()
@@ -155,39 +214,27 @@ export default function CajaPage() {
         estadosCaja = { disponible: 0, gastosOperativos: 0, totalIngresos: 0, totalEgresos: 0, recaudoTotal: 0 }
       }
       
-      // REGLA: Gastos operativos excluyen REVERSOS (ya calculado en calcularEstadosCaja)
-      const gastos = estadosCaja.gastosOperativos
+      // IMPORTANTE: gastos YA vienen de estadosCaja.gastosOperativos
+      // NO recalcular gastos
+      const gastosOperativos = estadosCaja.gastosOperativos
       
-      // REGLA: Disponible = SUM(INGRESOS) - SUM(EGRESOS) (ya calculado en calcularEstadosCaja)
-      const disponible = estadosCaja.disponible
+      // 3️⃣ Calcular ÚNICAMENTE los 3 visores
       
-      // REGLA: Recaudo Total = SUM(INGRESOS de "Pago Cuota%") - SUM(EGRESOS de "REVERSO - Eliminación Cuota%")
-      // Ya calculado en calcularEstadosCaja desde caja_central únicamente
-      const recaudoTotal = estadosCaja.recaudoTotal
+      // 🔹 RECAUDO TOTAL
+      const recaudoTotal = totalCuotas + totalMoras + totalActividades + totalInscripciones + totalUtilidadInversiones + totalInteresesPrestamos
       
-      // Calcular capital prestado (suma de montos de préstamos activos)
-      // NOTA: Esto NO es contable, es informativo - no viene de caja_central
-      const prestamosActivos = (Array.isArray(prestamos) ? prestamos : []).filter(p => p?.estado === 'activo')
-      const capitalPrestado = prestamosActivos.reduce((sum, p) => {
-        const monto = parseFloat(String(p?.monto || 0)) || 0
-        return sum + (isNaN(monto) ? 0 : monto)
-      }, 0)
+      // 🔹 CAPITAL PRESTADO
+      const capitalPrestado = totalCapitalPrestado + totalInversiones - totalAbonosCapital
       
-      console.log('AUDITORÍA DE CAJA (desde caja_central):', {
-        disponible: disponible.toLocaleString(),
-        gastosOperativos: gastos.toLocaleString(),
-        totalIngresos: estadosCaja.totalIngresos.toLocaleString(),
-        totalEgresos: estadosCaja.totalEgresos.toLocaleString(),
-        recaudoTotal: recaudoTotal.toLocaleString(), // SUM(Pago Cuota%) - SUM(REVERSO Eliminación Cuota%)
-        capitalPrestado: capitalPrestado.toLocaleString(),
-        abonosCapital: abonosCapital.toLocaleString()
-      })
+      // 🔹 DISPONIBLE EN CAJA
+      const disponible = recaudoTotal-totalCapitalPrestado+totalAbonosCapital -totalInversiones -gastosOperativos
       
+      // 4️⃣ Al FINAL, hacer UN SOLO setIndicadores
       setIndicadores({
         recaudoTotal,
         capitalPrestado,
-        abonosCapital,
-        gastos,
+        abonosCapital: totalAbonosCapital,
+        gastos: gastosOperativos,
         disponible
       })
       
@@ -208,43 +255,30 @@ export default function CajaPage() {
       }
       setCuotasPorMes(cuotasMes)
 
-      // Obtener resumen de inscripciones pagadas
-      try {
-        const resumen = await obtenerResumenInscripciones()
-        setResumenInscripciones(resumen)
-      } catch (error) {
-        console.warn('Error obteniendo resumen de inscripciones:', error)
+      // Establecer resumen de inscripciones (ya obtenido arriba, reutilizar)
+      if (resumenInscripcionesResult) {
+        setResumenInscripciones(resumenInscripcionesResult)
+      } else {
         setResumenInscripciones({ cantidad: 0, valorTotal: 0 })
       }
       
     } catch (error: any) {
-      // Manejo robusto de errores en UI: mostrar mensaje amigable en lugar de romperse
-      console.error('❌ Error crítico cargando datos de caja:', {
-        error: error,
-        message: error?.message,
-        code: error?.code
-      })
-      
-      // Establecer valores por defecto para evitar que la página se rompa
-      setSaldoCaja(0)
-      setMovimientosCaja([])
-      setIndicadores({
-        recaudoTotal: 0,
-        capitalPrestado: 0,
-        abonosCapital: 0,
-        gastos: 0,
-        disponible: 0
-      })
-      setCuotasPorMes([])
-      setResumenInscripciones({ cantidad: 0, valorTotal: 0 })
-      
-      // Mostrar mensaje al usuario solo si es un error crítico (no errores de tablas vacías)
-      if (error?.code !== 'PGRST116' && error?.code !== '42P01' && !error?.message?.includes('does not exist')) {
-        alert('Advertencia: Algunos datos no pudieron cargarse. La página mostrará "Sin movimientos" si las tablas están vacías.')
-      }
+      console.error('❌ Error en Fase 2:', error)
+      // No mostrar alertas en Fase 2 para no interrumpir la UX
     } finally {
-      setLoading(false)
+      setLoadingDatosSecundarios(false)
     }
+  }
+
+  // Función principal que coordina ambas fases
+  const loadData = async () => {
+    // Fase 1: Carga rápida y renderiza UI
+    await loadDataFase1()
+    
+    // Fase 2: Carga pesada en segundo plano (sin bloquear UI)
+    loadDataFase2().catch(error => {
+      console.error('Error en carga de datos secundarios:', error)
+    })
   }
 
   const handleAbrirModalGasto = () => {
@@ -323,7 +357,7 @@ export default function CajaPage() {
       alert('Gasto de caja registrado correctamente')
       handleCerrarModalGasto()
       
-      // Recargar datos para actualizar el visor
+      // Recargar datos para actualizar el visor (ambas fases)
       await loadData()
     } catch (error: any) {
       console.error('Error guardando gasto:', error)
@@ -346,7 +380,12 @@ export default function CajaPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Wallet className="w-8 h-8 text-white" />
-            <h1 className="text-4xl font-bold text-white">Caja Central</h1>
+            <div className="flex flex-col">
+              <h1 className="text-4xl font-bold text-white">Caja Central</h1>
+              {loadingDatosSecundarios && (
+                <p className="text-xs text-gray-400 mt-1">Actualizando datos detallados...</p>
+              )}
+            </div>
           </div>
           <div className="flex gap-3">
             <Link
@@ -383,7 +422,7 @@ export default function CajaPage() {
           </div>
           
           <div className="bg-red-700 rounded-lg shadow-lg p-6 border border-red-600">
-            <p className="text-sm text-red-200 mb-2">CAPITAL PRESTADO</p>
+            <p className="text-sm text-red-200 mb-2">CAPITAL PRESTADO / INVERTIDO</p>
             <p className="text-3xl font-bold text-white">
               ${(indicadores?.capitalPrestado || 0).toLocaleString()}
             </p>

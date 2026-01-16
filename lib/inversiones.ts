@@ -118,10 +118,13 @@ export async function reportarUtilidadInversion(
     throw new Error('Inversión no encontrada')
   }
 
-  // Actualizar utilidad en la inversión
+  // Actualizar utilidad en la inversión y poner valor_invertido a 0 (cierre contable)
   const { data, error } = await supabase
     .from('inversiones')
-    .update({ utilidad_reportada: utilidad })
+    .update({ 
+      utilidad_reportada: utilidad,
+      valor_invertido: 0  // REGLA: Al registrar utilidad, el valor invertido pasa a 0 (cierre contable)
+    })
     .eq('id', inversionId)
     .select()
     .single()

@@ -213,28 +213,83 @@ export async function calcularEstadosCaja(): Promise<EstadosCaja> {
       if (tipo === 'INGRESO') {
         totalIngresos += monto
         
-        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%", "MORA", "INSCRIP", "PAGO ACTIVIDAD", "UTILIDAD INVERSIÓN", y "REVERSO - Eliminación Inversión"
+        // REGLA: Recaudo Total incluye solo ingresos de "Pago Cuota%", "MORA", "INSCRIP", "PAGO ACTIVIDAD", "UTILIDAD INVERSIÓN", "REVERSO - Eliminación Inversión", y "PAGO PRÉSTAMO" (solo el interés)
         const conceptoUpper = concepto.toUpperCase()
 
-if (
-  conceptoUpper.includes('PAGO CUOTA') ||
-  conceptoUpper.includes('MORA') ||
-  conceptoUpper.includes('INSCRIP') ||
-  conceptoUpper.includes('PAGO ACTIVIDAD') ||
-  conceptoUpper.includes('UTILIDAD INVERSIÓN') ||
-  (conceptoUpper.includes('REVERSO') && conceptoUpper.includes('ELIMINACIÓN INVERSIÓN'))
-) {
-  ingresosCuotas += monto
-}
+        if (
+          conceptoUpper.includes('PAGO CUOTA') ||
+          conceptoUpper.includes('MORA') ||
+          conceptoUpper.includes('INSCRIP') ||
+          conceptoUpper.includes('PAGO ACTIVIDAD') ||
+          conceptoUpper.includes('UTILIDAD INVERSIÓN') ||
+          (conceptoUpper.includes('REVERSO') && conceptoUpper.includes('ELIMINACIÓN INVERSIÓN'))
+        ) {
+          ingresosCuotas += monto
+        } else if (conceptoUpper.includes('PAGO PRÉSTAMO') || conceptoUpper.includes('PAGO PRESTAMO')) {
+          // REGLA ESPECIAL: Para pagos de préstamo, solo contar el INTERÉS PAGADO en recaudo total
+          // El monto del movimiento incluye interés + abono, pero el recaudo solo debe incluir el interés
+          // Buscar el interés pagado en la tabla pagos_prestamos usando la fecha
+          try {
+            // Extraer nombre del prestamista del concepto: "Pago préstamo – {nombre}"
+            const nombreMatch = concepto.match(/[–-]\s*(.+)$/i)
+            const nombrePrestamista = nombreMatch ? nombreMatch[1].trim() : ''
+            
+            // Buscar préstamos del prestamista
+            let prestamoId: number | null = null
+            if (nombrePrestamista) {
+              const { data: prestamos } = await supabase
+                .from('prestamos')
+                .select('id')
+                .eq('nombre_prestamista', nombrePrestamista)
+                .eq('estado', 'activo')
+                .limit(1)
+                .maybeSingle()
+              
+              if (prestamos) {
+                prestamoId = prestamos.id
+              }
+            }
+            
+            // Buscar el movimiento de préstamo correspondiente por fecha (y opcionalmente por préstamo_id)
+            let query = supabase
+              .from('pagos_prestamos')
+              .select('interes_pagado')
+              .eq('fecha', mov.fecha)
+            
+            if (prestamoId) {
+              query = query.eq('prestamo_id', prestamoId)
+            }
+            
+            const { data: movimientosPrestamo } = await query
+              //.order('created_at', { ascending: false })
+              .limit(1)
+            
+            if (movimientosPrestamo && movimientosPrestamo.length > 0 && movimientosPrestamo[0].interes_pagado) {
+              // Usar el interés pagado real desde la BD
+              const interesPagado = parseFloat(String(movimientosPrestamo[0].interes_pagado || 0)) || 0
+              ingresosCuotas += interesPagado
+            } else {
+              // Fallback: si no se encuentra, no incluir en recaudo (evitar duplicar)
+              // El interés se contabilizará cuando se encuentre el movimiento
+              console.warn(`No se encontró interés pagado para movimiento de préstamo del ${mov.fecha}`)
+            }
+          } catch (error: any) {
+            // Si falla la búsqueda, no incluir en recaudo (evitar errores)
+            console.warn('Error buscando interés pagado en préstamos:', error?.message)
+          }
+        }
 
       } 
       else if (tipo === 'EGRESO') {
         totalEgresos += monto
         
-        // REGLA: Gastos operativos excluyen REVERSOS e INVERSIONES
-        // Los movimientos con concepto que empiece por "REVERSO" o contenga "INVERSIÓN –" NO son gastos operativos
+        // REGLA: Gastos operativos excluyen REVERSOS, INVERSIONES y PRÉSTAMOS
+        // Los movimientos con concepto que empiece por "REVERSO", contenga "INVERSIÓN –" o "DESEMBOLSO PRÉSTAMO" NO son gastos operativos
         const conceptoUpperEgreso = concepto.toUpperCase()
-        if (!conceptoUpperEgreso.startsWith('REVERSO') && !conceptoUpperEgreso.includes('INVERSIÓN –')) {
+        if (!conceptoUpperEgreso.startsWith('REVERSO') && 
+            !conceptoUpperEgreso.includes('INVERSIÓN –') &&
+            !conceptoUpperEgreso.includes('DESEMBOLSO PRÉSTAMO') &&
+            !conceptoUpperEgreso.includes('DESEMBOLSO PRESTAMO')) {
           gastosOperativos += monto
         }
         
@@ -445,18 +500,21 @@ export async function obtenerGastosCaja(): Promise<MovimientoCaja[]> {
       return []
     }
     
-    // FILTRAR INVERSIONES Y REVERSOS: NO son gastos
+    // FILTRAR INVERSIONES, REVERSOS Y PRÉSTAMOS: NO son gastos
     // Excluir movimientos con concepto que contenga:
     // - "Inversión –" o "Utilidad Inversión –" (inversiones)
     // - "REVERSO - Eliminación Pago Mora" (correcciones de pagos de mora)
     // - "REVERSO - Eliminación Mora Cuota" (correcciones de eliminación de cuotas con mora)
+    // - "Desembolso préstamo" o "Desembolso prestamo" (préstamos NO son gastos)
     const gastosFiltrados = data.filter((mov: any) => {
       const concepto = String(mov.concepto || '').toUpperCase()
-      // Excluir inversiones, utilidades de inversión, y todos los REVERSOS (no son gastos)
+      // Excluir inversiones, utilidades de inversión, todos los REVERSOS, y préstamos (no son gastos)
       return !concepto.includes('INVERSIÓN –') && 
              !concepto.includes('UTILIDAD INVERSIÓN –') &&
              !concepto.includes('REVERSO - ELIMINACIÓN PAGO MORA') &&
-             !concepto.includes('REVERSO - ELIMINACIÓN MORA CUOTA')
+             !concepto.includes('REVERSO - ELIMINACIÓN MORA CUOTA') &&
+             !concepto.includes('DESEMBOLSO PRÉSTAMO') &&
+             !concepto.includes('DESEMBOLSO PRESTAMO')
     })
     
     // Asegurar que todos los valores numéricos estén correctamente parseados

@@ -34,6 +34,7 @@ export default function InversionesPage() {
   const [nombreEditando, setNombreEditando] = useState('')
   const [fechaEditando, setFechaEditando] = useState('')
   const [valorEditando, setValorEditando] = useState('')
+  const [utilidadEditando, setUtilidadEditando] = useState('')
 
   useEffect(() => {
     loadData()
@@ -130,24 +131,50 @@ export default function InversionesPage() {
     }
 
     const valor = parseFloat(valorEditando)
-    if (isNaN(valor) || valor <= 0) {
-      alert('El valor debe ser un número mayor a 0')
+    if (isNaN(valor) || valor < 0) {
+      alert('El valor debe ser un número mayor o igual a 0')
       return
     }
 
     try {
       setSubmitting(true)
-      await actualizarInversion(inversionEditando.id, {
-        nombre: nombreEditando,
-        valor_invertido: valor,
-        fecha: fechaEditando
-      })
+      
+      // Si se ingresó o modificó la utilidad, actualizarla primero (esto pondrá valor_invertido a 0)
+      if (utilidadEditando !== '') {
+        const utilidadValue = parseFloat(utilidadEditando)
+        if (!isNaN(utilidadValue)) {
+          // REGLA: Si hay utilidad, actualizar y poner valor_invertido a 0 automáticamente
+          await reportarUtilidadInversion(inversionEditando.id, utilidadValue)
+          // Luego actualizar nombre y fecha (valor_invertido ya está en 0)
+          await actualizarInversion(inversionEditando.id, {
+            nombre: nombreEditando,
+            fecha: fechaEditando
+            // NO actualizar valor_invertido aquí porque reportarUtilidadInversion ya lo puso en 0
+          })
+        } else {
+          // Si la utilidad no es válida, solo actualizar los otros campos
+          await actualizarInversion(inversionEditando.id, {
+            nombre: nombreEditando,
+            valor_invertido: valor,
+            fecha: fechaEditando
+          })
+        }
+      } else {
+        // Si NO se modificó la utilidad, actualizar normalmente (nombre, fecha, valor_invertido)
+        await actualizarInversion(inversionEditando.id, {
+          nombre: nombreEditando,
+          valor_invertido: valor,
+          fecha: fechaEditando
+        })
+      }
+      
       await loadData()
       setShowModalEditar(false)
       setInversionEditando(null)
       setNombreEditando('')
       setFechaEditando('')
       setValorEditando('')
+      setUtilidadEditando('')
       alert('Inversión actualizada exitosamente')
     } catch (error: any) {
       console.error('Error updating inversion:', error)
@@ -184,7 +211,18 @@ export default function InversionesPage() {
     setInversionEditando(inversion)
     setNombreEditando(inversion.nombre)
     setFechaEditando(inversion.fecha)
-    setValorEditando(inversion.valor_invertido.toString())
+    // REGLA: Si tiene utilidad registrada, mostrar 0 como valor por defecto (pero el usuario puede cambiarlo)
+    // Si no tiene utilidad, mostrar el valor_invertido actual
+    const valorMostrar = (inversion.utilidad_reportada !== null && inversion.utilidad_reportada !== undefined) 
+      ? '0' 
+      : inversion.valor_invertido.toString()
+    setValorEditando(valorMostrar)
+    // Cargar utilidad actual si existe
+    setUtilidadEditando(
+      inversion.utilidad_reportada !== null && inversion.utilidad_reportada !== undefined
+        ? inversion.utilidad_reportada.toString()
+        : ''
+    )
     setShowModalEditar(true)
   }
 
@@ -289,10 +327,10 @@ export default function InversionesPage() {
                               onClick={() => abrirModalUtilidad(inversion)}
                               disabled={!inversion?.id}
                               className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-1"
-                              title="Reportar Utilidad"
+                              title={inversion.utilidad_reportada !== null && inversion.utilidad_reportada !== undefined ? "Editar Utilidad" : "Registrar Utilidad"}
                             >
                               <TrendingUp className="w-3 h-3" />
-                              Utilidad
+                              {inversion.utilidad_reportada !== null && inversion.utilidad_reportada !== undefined ? 'Editar Utilidad' : 'Registrar Utilidad'}
                             </button>
                             <button
                               onClick={() => abrirModalEditar(inversion)}
@@ -399,7 +437,7 @@ export default function InversionesPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
               <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
-                Reportar Utilidad
+                {inversionSeleccionada.utilidad_reportada !== null && inversionSeleccionada.utilidad_reportada !== undefined ? 'Editar Utilidad' : 'Registrar Utilidad'}
               </h2>
               
               <div className="space-y-4">
@@ -500,6 +538,26 @@ export default function InversionesPage() {
                     step="1"
                     required
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Si la inversión tiene utilidad registrada, este valor normalmente es 0 (cierre contable)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Utilidad Reportada (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    value={utilidadEditando}
+                    onChange={(e) => setUtilidadEditando(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    step="1000"
+                    placeholder="Puede ser positivo o negativo"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Deja vacío para no modificar. Si ingresas un valor, se actualizará la utilidad y el valor invertido se pondrá en 0 automáticamente.
+                  </p>
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -518,6 +576,7 @@ export default function InversionesPage() {
                       setNombreEditando('')
                       setFechaEditando('')
                       setValorEditando('')
+                      setUtilidadEditando('')
                     }}
                     className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
                   >

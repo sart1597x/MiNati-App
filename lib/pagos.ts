@@ -600,3 +600,37 @@ export async function eliminarPago(
 
   if (error) throw error
 }
+// =====================================================
+// TOTAL RECAUDO DE CUOTAS (PARA CAJA CENTRAL)
+// NO modifica lógica existente
+// =====================================================
+export async function obtenerTotalRecaudoCuotas(): Promise<{
+  totalCuotas: number
+  valorTotal: number
+}> {
+  // 1. Obtener todas las cuotas pagadas
+  const { data, error } = await supabase
+    .from('cuotas_pagos')
+    .select('id')
+    .eq('pagado', true)
+
+  if (error) {
+    console.error('Error obteniendo cuotas pagadas:', error)
+    throw error
+  }
+
+  const totalCuotas = data?.length || 0
+
+  // 2. Obtener valor de la cuota desde configuración
+  const configuracion = await obtenerConfiguracionNacional()
+  const valorCuota = Number(configuracion?.valor_cuota || 0)
+
+
+  // 3. Calcular total recaudado
+  const valorTotal = totalCuotas * valorCuota
+
+  return {
+    totalCuotas,
+    valorTotal
+  }
+}

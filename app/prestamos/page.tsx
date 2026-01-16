@@ -21,7 +21,16 @@ export default function PrestamosPage() {
   const [whatsappExterno, setWhatsappExterno] = useState('')
   const [monto, setMonto] = useState('')
   const [tasaInteres, setTasaInteres] = useState('')
-  const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0])
+  // Helper para obtener fecha local sin UTC
+  const getFechaLocalHoy = () => {
+    const hoy = new Date()
+    const year = hoy.getFullYear()
+    const month = String(hoy.getMonth() + 1).padStart(2, '0')
+    const day = String(hoy.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const [fechaInicio, setFechaInicio] = useState(getFechaLocalHoy())
   const [submitting, setSubmitting] = useState(false)
 
   // Buscar socios cuando se escribe en el buscador
@@ -89,7 +98,7 @@ export default function PrestamosPage() {
       setWhatsappExterno('')
       setMonto('')
       setTasaInteres('')
-      setFechaInicio(new Date().toISOString().split('T')[0])
+      setFechaInicio(getFechaLocalHoy())
       
       alert('Préstamo registrado exitosamente')
       setView('menu')
@@ -136,21 +145,21 @@ export default function PrestamosPage() {
             </button>
 
             <Link
-              href="/prestamos/pago"
-              className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-            >
-              <CreditCard className="w-16 h-16 text-green-600 mb-4" />
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Pago de Préstamo</h2>
-              <p className="text-gray-600 dark:text-gray-400 text-center">Registrar un pago</p>
-            </Link>
-
-            <Link
               href="/prestamos/lista"
               className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
             >
               <Database className="w-16 h-16 text-purple-600 mb-4" />
               <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Base de Datos</h2>
               <p className="text-gray-600 dark:text-gray-400 text-center">Ver todos los préstamos</p>
+            </Link>
+
+            <Link
+              href="/prestamos/intereses"
+              className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+            >
+              <Share2 className="w-16 h-16 text-yellow-600 mb-4" />
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Historial de Intereses</h2>
+              <p className="text-gray-600 dark:text-gray-400 text-center">Ver pagos de intereses</p>
             </Link>
           </div>
         )}
