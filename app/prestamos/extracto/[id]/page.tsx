@@ -383,11 +383,11 @@ export default function ExtractoPrestamoPage() {
         if (mov.dias_causados > 0) {
           mensaje += `   Días: ${mov.dias_causados}\n`
         }
-        if (mov?.interes_causado > 0) {
-          mensaje += `   Interés: $${mov.interes_causado.toLocaleString()}\n`
+        if ((mov as any).interes_causado > 0) {
+          mensaje += `   Interés: $${(mov as any).interes_causado.toLocaleString()}\n`
         }
-        if (mov?.abono_capital > 0) {
-          mensaje += `   Abono Capital: $${mov.abono_capital.toLocaleString()}\n`
+        if ((mov as any).abono_capital > 0) {
+          mensaje += `   Abono Capital: $${(mov as any).abono_capital.toLocaleString()}\n`
         }
         mensaje += `   Capital Pendiente: $${mov.capital_pendiente.toLocaleString()}\n`
         mensaje += `   Saldo Total: $${mov.saldo_pendiente.toLocaleString()}\n\n`
@@ -677,7 +677,7 @@ export default function ExtractoPrestamoPage() {
     : '$ -'}
 </td>
                         <td className="px-3 py-3 text-right text-gray-300">
-                          {mov.abono_capital > 0 ? `$${mov.abono_capital.toLocaleString()}` : '$ -'}
+                          {(mov as any).abono_capital > 0 ? `$${(mov as any).abono_capital.toLocaleString()}` : '$ -'}
                         </td>
                         <td className="px-3 py-3 text-right font-semibold text-gray-200">
                           ${mov.capital_pendiente.toLocaleString()}
