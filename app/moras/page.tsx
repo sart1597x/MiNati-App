@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Home, MessageCircle, FolderOpen, Calendar, Trash2 } from 'lucide-react'
+import { Home, Printer, FolderOpen, Calendar, Trash2 } from 'lucide-react'
 import { Mora, obtenerMorasActivas, registrarPagoMora } from '@/lib/moras'
 import { supabase } from '@/lib/supabase'
 import { crearMovimientoCaja, obtenerUltimoSaldo } from '@/lib/caja'
@@ -231,33 +231,10 @@ export default function MorasPage() {
     }
   }
 
-  const handleWhatsAppGeneral = async () => {
-    // Obtener todas las moras activas (resta > 0)
-    const morasActivas = moras.filter(m => m.resta > 0)
-    
-    if (morasActivas.length === 0) {
-      alert('No hay moras pendientes para enviar')
-      return
-    }
-    
-    // Crear mensaje general con todos los deudores
-    let mensaje = `📋 REPORTE DE COBRO DE MORAS - MiNati2026\n\n`
-    mensaje += `Total de deudores: ${morasActivas.length}\n\n`
-    
-    morasActivas.forEach((mora, index) => {
-      mensaje += `${index + 1}. ${mora.nombre}\n`
-      mensaje += `   Cuota: ${mora.numero_cuota}\n`
-      mensaje += `   Días de mora: ${mora.dias_mora}\n`
-      mensaje += `   Total sanción: $${mora.total_sancion.toLocaleString()}\n`
-      mensaje += `   Valor pagado: $${mora.valor_pagado.toLocaleString()}\n`
-      mensaje += `   Resta: $${mora.resta.toLocaleString()}\n\n`
-    })
-    
-    mensaje += `⚠️ Recuerda que el pago extemporáneo trae una multa de $3.000 por día!\n\n`
-    mensaje += `Por favor, realiza tu pago lo antes posible para evitar mayores cargos.`
-    
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(whatsappUrl, '_blank')
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.print()
   }
 
   const handleEliminarMora = async (mora: Mora) => {
@@ -371,11 +348,12 @@ export default function MorasPage() {
           </h1>
           <div className="flex gap-3">
             <button
-              onClick={handleWhatsAppGeneral}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              type="button"
+              onClick={handleImprimir}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
             >
-              <MessageCircle className="w-4 h-4" />
-              <span>📲 WhatsApp General</span>
+              <Printer className="w-4 h-4" />
+              <span>Imprimir / PDF</span>
             </button>
             <Link
               href="/pagos"
@@ -568,6 +546,187 @@ export default function MorasPage() {
           </div>
         )}
       </div>
+      <style jsx global>{`
+        @media print {
+          /* ELIMINAR EL 'RESET' DEL NAVEGADOR - PRIMERO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FIJAR FONDO OSCURO CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* OCULTAR SOLO INTERFAZ INNECESARIA */
+          .no-print,
+          button,
+          nav,
+          a,
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - BOX-SHADOW PARA FONDO OSCURO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gradient-to-br {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            color: white !important;
+          }
+          
+          /* CONTENEDORES CLAROS - MANTENER COLORES ORIGINALES */
+          .bg-blue-50 {
+            box-shadow: inset 0 0 0 1000px #eff6ff !important;
+            background-color: #eff6ff !important;
+            color: black !important;
+          }
+          
+          .bg-indigo-100 {
+            box-shadow: inset 0 0 0 1000px #e0e7ff !important;
+            background-color: #e0e7ff !important;
+            color: black !important;
+          }
+          
+          .bg-white {
+            box-shadow: inset 0 0 0 1000px #ffffff !important;
+            background-color: #ffffff !important;
+            color: black !important;
+          }
+          
+          /* TEXTOS VISIBLES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300 {
+            color: white !important;
+          }
+          
+          /* Textos en fondos oscuros - blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 * {
+            color: white !important;
+          }
+          
+          /* Textos en fondos claros - negro */
+          .bg-white *,
+          .bg-blue-50 *,
+          .bg-indigo-100 * {
+            color: black !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main,
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+          
+          /* Tablas al 100% de ancho sin cortes */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          thead {
+            display: table-header-group !important;
+          }
+          
+          /* Texto negro para lectura óptima */
+          body,
+          .text-gray-800,
+          .text-gray-900,
+          .dark\\:text-white,
+          .dark\\:text-gray-300 {
+            color: black !important;
+          }
+          
+          /* PRESERVAR COLORES DE BADGES Y ESTADOS */
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700 {
+            background-color: #ef4444 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700 {
+            background-color: #10b981 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* Mantener colores de texto en badges */
+          .text-white {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* Fondos de tablas y contenedores - blanco pero mantener bordes */
+          .bg-white,
+          .dark\\:bg-gray-800 {
+            background: white !important;
+          }
+          
+          .bg-gray-100,
+          .bg-gray-200,
+          .dark\\:bg-gray-700 {
+            background: #f3f4f6 !important;
+          }
+          
+          /* Bordes visibles para tablas */
+          table,
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

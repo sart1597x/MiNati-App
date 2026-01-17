@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Home, Share2, AlertCircle } from 'lucide-react'
+import { Home, Printer, AlertCircle } from 'lucide-react'
 import { Socio, PagoCuota } from '@/lib/supabase'
 import { getSocios } from '@/lib/socios'
 import { 
@@ -409,10 +409,10 @@ return {
 
   const listaExpandida = expandirSociosConIndice()
 
-  const handleShareWhatsApp = () => {
-    const url = window.location.href
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Registro de Cuotas - MiNati2026\n${url}`)}`
-    window.open(whatsappUrl, '_blank')
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.print()
   }
 
   return (
@@ -449,11 +449,12 @@ return {
               <span>Volver al Home</span>
             </Link>
             <button
-              onClick={handleShareWhatsApp}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              type="button"
+              onClick={handleImprimir}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
             >
-              <Share2 className="w-4 h-4" />
-              <span>Compartir en WhatsApp</span>
+              <Printer className="w-4 h-4" />
+              <span>Imprimir / PDF</span>
             </button>
             <Link
               href="/moras"
@@ -685,6 +686,317 @@ return {
           )
         })()}
       </div>
+      <style jsx global>{`
+        @media print {
+          /* BLOQUEAR ESTILOS POR DEFECTO DEL NAVEGADOR - PRIMERO Y OBLIGATORIO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FORZAR FONDO OSCURO EXACTO - BLOQUEAR NAVEGADOR */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - FONDO OSCURO FORZADO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gradient-to-br {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            background: #1f2937 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-gray-700,
+          .dark\\:bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            background: #374151 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* LEYENDA AZUL - FORZAR COLOR EXACTO */
+          .bg-blue-100,
+          .dark\\:bg-blue-900 {
+            box-shadow: inset 0 0 0 1000px #dbeafe !important;
+            background-color: #dbeafe !important;
+            background: #dbeafe !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .dark\\:bg-blue-900 {
+            box-shadow: inset 0 0 0 1000px #1e3a8a !important;
+            background-color: #1e3a8a !important;
+            background: #1e3a8a !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* TEXTOS EN LEYENDA - FORZAR COLORES */
+          .bg-blue-100 .text-blue-800,
+          .dark\\:bg-blue-900 .text-blue-200,
+          .text-blue-800,
+          .dark\\:text-blue-200 {
+            color: #1e40af !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* CONTENEDORES DE TABLA - FONDO OSCURO FORZADO */
+          .bg-white.dark\\:bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            background: #1f2937 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* OCULTAR SOLO NAVEGACIÓN Y CONTROLES */
+          .no-print,
+          button:not(.rounded-full):not([class*="rounded-full"]),
+          nav,
+          a,
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* EXCEPCIÓN: NO ocultar caritas y círculos */
+          .rounded-full,
+          .w-6.h-6.rounded-full,
+          span.rounded-full,
+          div.rounded-full,
+          button.rounded-full,
+          button[class*="rounded-full"] {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+          }
+          
+          /* FORZAR CÍRCULOS DE CARITAS - COLORES EXACTOS */
+          /* Verde - Pagado */
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700,
+          button[class*="bg-green"],
+          .rounded-full.bg-green-500,
+          button.rounded-full[class*="bg-green"],
+          span.rounded-full.bg-green-500 {
+            box-shadow: inset 0 0 0 1000px #10b981 !important;
+            background-color: #10b981 !important;
+            background: #10b981 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Amarillo - Pendiente */
+          .bg-yellow-500,
+          .bg-yellow-600,
+          .bg-yellow-700,
+          button[class*="bg-yellow"],
+          .rounded-full.bg-yellow-500,
+          button.rounded-full[class*="bg-yellow"],
+          span.rounded-full.bg-yellow-500 {
+            box-shadow: inset 0 0 0 1000px #eab308 !important;
+            background-color: #eab308 !important;
+            background: #eab308 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Rojo - Mora */
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700,
+          button[class*="bg-red"],
+          .rounded-full.bg-red-500,
+          button.rounded-full[class*="bg-red"],
+          span.rounded-full.bg-red-500 {
+            box-shadow: inset 0 0 0 1000px #ef4444 !important;
+            background-color: #ef4444 !important;
+            background: #ef4444 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Gris - Retirado */
+          .bg-gray-400,
+          .bg-gray-500,
+          button[class*="bg-gray"]:not([class*="bg-gray-200"]):not([class*="bg-gray-100"]):not([class*="bg-gray-300"]),
+          .rounded-full.bg-gray-400,
+          button.rounded-full[class*="bg-gray"]:not([class*="bg-gray-200"]):not([class*="bg-gray-100"]):not([class*="bg-gray-300"]),
+          span.rounded-full.bg-gray-400 {
+            box-shadow: inset 0 0 0 1000px #9ca3af !important;
+            background-color: #9ca3af !important;
+            background: #9ca3af !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* TEXTOS EN CÍRCULOS - BLANCO */
+          .rounded-full .text-white,
+          button.rounded-full .text-white,
+          .bg-green-500 .text-white,
+          .bg-yellow-500 .text-white,
+          .bg-red-500 .text-white,
+          .bg-gray-400 .text-white {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* EMOJIS/CARITAS VISIBLES */
+          .rounded-full span,
+          button.rounded-full span {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: inline-flex !important;
+            color: white !important;
+          }
+          
+          /* TABLAS - FONDO OSCURO Y BORDES EXACTOS */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            background-color: transparent !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          thead {
+            background-color: transparent !important;
+            display: table-header-group !important;
+          }
+          
+          tbody tr {
+            background-color: transparent !important;
+            page-break-inside: avoid !important;
+          }
+          
+          tbody tr td {
+            background-color: transparent !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* CÍRCULOS DENTRO DE TABLAS - MANTENER COLORES */
+          tbody tr td .rounded-full,
+          tbody tr td button.rounded-full,
+          tbody tr td span.rounded-full {
+            box-shadow: inset 0 0 0 1000px !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* BORDES DE TABLAS - EXACTOS */
+          table,
+          th,
+          td {
+            border: 1px solid #4b5563 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* TEXTOS GENERALES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300,
+          .text-gray-400 {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* Textos en fondos oscuros - siempre blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 *,
+          .dark\\:bg-gray-700 * {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main,
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { Home, ArrowLeft, Share2, Edit2, CreditCard, X, Trash2 } from 'lucide-react'
+import { Home, ArrowLeft, Printer, Edit2, CreditCard, X, Trash2 } from 'lucide-react'
 import { 
   obtenerPrestamos, 
   obtenerMovimientosPrestamo, 
@@ -364,38 +364,10 @@ export default function ExtractoPrestamoPage() {
     }
   }
 
-  const handleCompartirWhatsApp = () => {
-    if (!prestamo) return
-
-    let mensaje = `EXTRACTO DE CRÉDITO\n\n`
-    mensaje += `Cliente: ${prestamo.nombre_prestamista}\n`
-    mensaje += `Monto: $${prestamo.monto.toLocaleString()}\n`
-    const tasaInteres = (prestamo as any).tasa_interes || 0
-    mensaje += `Tasa: ${tasaInteres}% mensual\n\n`
-    mensaje += `MOVIMIENTOS:\n\n`
-
-    movimientos.forEach((mov, index) => {
-      if (mov.tipo_movimiento !== 'desembolso' || index === 0) {
-        mensaje += `${index}. ${dateFromInput(mov.fecha).toLocaleDateString('es-ES')} - ${mov.tipo_display}\n`
-        if (mov.valor_pagado > 0) {
-          mensaje += `   Valor Pagado: $${mov.valor_pagado.toLocaleString()}\n`
-        }
-        if (mov.dias_causados > 0) {
-          mensaje += `   Días: ${mov.dias_causados}\n`
-        }
-        if ((mov as any).interes_causado > 0) {
-          mensaje += `   Interés: $${(mov as any).interes_causado.toLocaleString()}\n`
-        }
-        if ((mov as any).abono_capital > 0) {
-          mensaje += `   Abono Capital: $${(mov as any).abono_capital.toLocaleString()}\n`
-        }
-        mensaje += `   Capital Pendiente: $${mov.capital_pendiente.toLocaleString()}\n`
-        mensaje += `   Saldo Total: $${mov.saldo_pendiente.toLocaleString()}\n\n`
-      }
-    })
-
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(whatsappUrl, '_blank')
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.print()
   }
 
   const handleAbrirModalPago = () => {
@@ -599,11 +571,12 @@ export default function ExtractoPrestamoPage() {
               </button>
             )}
             <button
-              onClick={handleCompartirWhatsApp}
-              className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+              type="button"
+              onClick={handleImprimir}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
             >
-              <Share2 className="w-4 h-4" />
-              <span>Compartir</span>
+              <Printer className="w-4 h-4" />
+              <span>Imprimir / PDF</span>
             </button>
           </div>
         </div>
@@ -901,6 +874,288 @@ export default function ExtractoPrestamoPage() {
           </div>
         )}
       </div>
+      <style jsx global>{`
+        @media print {
+          /* ELIMINAR EL 'RESET' DEL NAVEGADOR - PRIMERO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FIJAR FONDO OSCURO CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* OCULTAR SOLO INTERFAZ INNECESARIA */
+          .no-print,
+          button,
+          nav,
+          a:not([href="#"]),
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - BOX-SHADOW PARA FONDO OSCURO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gradient-to-br {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-600 {
+            box-shadow: inset 0 0 0 1000px #4b5563 !important;
+            background-color: #4b5563 !important;
+            color: white !important;
+          }
+          
+          /* TEXTOS VISIBLES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300,
+          .text-gray-400 {
+            color: white !important;
+          }
+          
+          /* Textos en fondos oscuros - blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .bg-gray-600 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 * {
+            color: white !important;
+          }
+          
+          /* CUADRO SALDO A LA FECHA - Forzar gradiente azul */
+          .bg-gradient-to-r.from-blue-700.to-blue-600,
+          .bg-gradient-to-r.from-blue-700,
+          .bg-gradient-to-r.from-blue-600,
+          .from-blue-700.to-blue-600 {
+            box-shadow: inset 0 0 0 1000px #1d4ed8 !important;
+            background: linear-gradient(to right, #1d4ed8, #2563eb) !important;
+            background-color: #1d4ed8 !important;
+            border: 1px solid #1e40af !important;
+          }
+          
+          /* Texto dentro del cuadro de saldo - mantener blanco y azul claro */
+          .bg-gradient-to-r .text-white,
+          .from-blue-700 .text-white,
+          .to-blue-600 .text-white {
+            color: white !important;
+          }
+          
+          .bg-gradient-to-r .text-blue-200,
+          .from-blue-700 .text-blue-200,
+          .to-blue-600 .text-blue-200 {
+            color: #bfdbfe !important;
+          }
+          
+          /* Tablas al 100% de ancho sin cortes */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          thead {
+            display: table-header-group !important;
+          }
+          
+          /* Texto en tablas - mantener colores originales */
+          /* Los textos blancos se mantienen blancos, los grises se mantienen grises */
+          
+          /* FORZAR BADGES Y ESTADOS CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          /* Verde - Estado Activo */
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700 {
+            box-shadow: inset 0 0 0 1000px #10b981 !important;
+            background-color: #10b981 !important;
+            color: white !important;
+          }
+          
+          /* Amarillo - Pago Total */
+          .bg-yellow-500,
+          .bg-yellow-600,
+          .bg-yellow-700,
+          .bg-yellow-900 {
+            box-shadow: inset 0 0 0 1000px #eab308 !important;
+            background-color: #eab308 !important;
+            color: white !important;
+          }
+          
+          /* Rojo - Sin Pago */
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700 {
+            box-shadow: inset 0 0 0 1000px #ef4444 !important;
+            background-color: #ef4444 !important;
+            color: white !important;
+          }
+          
+          /* Azul - Desembolso, Saldo a la fecha */
+          .bg-blue-500,
+          .bg-blue-600,
+          .bg-blue-700 {
+            box-shadow: inset 0 0 0 1000px #1d4ed8 !important;
+            background-color: #1d4ed8 !important;
+            color: white !important;
+          }
+          
+          /* Índigo - Pago Interés + Abono */
+          .bg-indigo-700 {
+            box-shadow: inset 0 0 0 1000px #4338ca !important;
+            background-color: #4338ca !important;
+            color: white !important;
+          }
+          
+          /* Púrpura - Abono a Capital */
+          .bg-purple-700 {
+            box-shadow: inset 0 0 0 1000px #7e22ce !important;
+            background-color: #7e22ce !important;
+            color: white !important;
+          }
+          
+          /* Naranja - Interés Pendiente */
+          .bg-orange-700 {
+            box-shadow: inset 0 0 0 1000px #c2410c !important;
+            background-color: #c2410c !important;
+            color: white !important;
+          }
+          
+          /* Gris - Estado Pagado */
+          .bg-gray-600 {
+            box-shadow: inset 0 0 0 1000px #4b5563 !important;
+            background-color: #4b5563 !important;
+            color: white !important;
+          }
+          
+          /* GRADIENTE SALDO A LA FECHA - Forzar azul */
+          .bg-gradient-to-r.from-blue-700,
+          .bg-gradient-to-r.from-blue-600,
+          .from-blue-700,
+          .from-blue-600,
+          .to-blue-600 {
+            box-shadow: inset 0 0 0 1000px #1d4ed8 !important;
+            background: linear-gradient(to right, #1d4ed8, #2563eb) !important;
+            background-color: #1d4ed8 !important;
+          }
+          
+          /* Texto en badges - siempre blanco */
+          .bg-green-600 .text-white,
+          .bg-green-700 .text-white,
+          .bg-yellow-700 .text-white,
+          .bg-red-700 .text-white,
+          .bg-blue-700 .text-white,
+          .bg-indigo-700 .text-white,
+          .bg-purple-700 .text-white,
+          .bg-orange-700 .text-white,
+          .bg-gray-600 .text-white,
+          span.bg-green-600,
+          span.bg-green-700,
+          span.bg-yellow-700,
+          span.bg-red-700,
+          span.bg-blue-700,
+          span.bg-indigo-700,
+          span.bg-purple-700,
+          span.bg-orange-700,
+          span.bg-gray-600 {
+            color: white !important;
+          }
+          
+          /* Texto azul claro en cuadro de saldo */
+          .text-blue-200 {
+            color: #bfdbfe !important;
+          }
+          
+          /* TABLAS - Mantener fondo oscuro pero con bordes visibles */
+          table {
+            background-color: transparent !important;
+          }
+          
+          thead {
+            background-color: transparent !important;
+          }
+          
+          tbody tr {
+            background-color: transparent !important;
+          }
+          
+          tbody tr td {
+            background-color: transparent !important;
+            color: white !important;
+          }
+          
+          /* Bordes visibles para tablas */
+          table,
+          th,
+          td {
+            border: 1px solid #4b5563 !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main,
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+          
+          /* Mantener todos los textos visibles */
+          .text-gray-300,
+          .text-gray-400 {
+            color: #d1d5db !important;
+          }
+          
+          /* Títulos y textos grandes - mantener blancos */
+          .text-lg,
+          .text-xl,
+          .text-2xl,
+          .text-3xl,
+          .text-4xl,
+          .font-semibold,
+          .font-bold {
+            color: white !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

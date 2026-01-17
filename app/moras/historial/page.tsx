@@ -5,7 +5,7 @@
 // Última actualización: 2024-01-XX - Forzar refresco de caché
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Home, ArrowLeft, Trash2 } from 'lucide-react'
+import { Home, ArrowLeft, Trash2, Printer } from 'lucide-react'
 import { obtenerHistorialMoras, obtenerTotalRecaudadoMoras, eliminarRegistroMora, PagoMora } from '@/lib/moras'
 
 export default function HistorialMorasPage() {
@@ -34,6 +34,12 @@ export default function HistorialMorasPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.print()
   }
 
   const handleEliminarMora = async (historialId: number | string, nombreAsociado: string) => {
@@ -125,6 +131,14 @@ export default function HistorialMorasPage() {
             Historial de Moras
           </h1>
           <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleImprimir}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Imprimir / PDF</span>
+            </button>
             <Link
               href="/dashboard"
               className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
@@ -214,6 +228,226 @@ export default function HistorialMorasPage() {
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        @media print {
+          /* ELIMINAR EL 'RESET' DEL NAVEGADOR - PRIMERO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FIJAR FONDO OSCURO CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* OCULTAR SOLO INTERFAZ INNECESARIA */
+          .no-print,
+          button,
+          nav,
+          a,
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - BOX-SHADOW PARA FONDO OSCURO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gradient-to-br {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            color: white !important;
+          }
+          
+          /* TEXTOS VISIBLES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300 {
+            color: white !important;
+          }
+          
+          /* Textos en fondos oscuros - blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 * {
+            color: white !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main,
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+          
+          /* TABLAS */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          
+          table,
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+          }
+          /* Ocultar elementos de navegación y controles */
+          .no-print,
+          button,
+          nav,
+          a,
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* Fondo blanco para la página */
+          body,
+          html {
+            background: white !important;
+            margin: 0;
+            padding: 0;
+          }
+          
+          /* Fondo blanco para contenedores principales */
+          .bg-gradient-to-br,
+          .bg-blue-50,
+          .bg-indigo-100,
+          .dark\\:bg-gray-900,
+          .dark\\:bg-gray-800 {
+            background: white !important;
+          }
+          
+          /* Tablas al 100% de ancho sin cortes */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          thead {
+            display: table-header-group !important;
+          }
+          
+          
+          /* FORZAR COLORES EN TODOS LOS ELEMENTOS CON FONDO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* PRESERVAR COLORES DE BADGES Y TOTALIZADORES */
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700,
+          .bg-gradient-to-r.from-green-500,
+          .bg-gradient-to-r.from-green-600 {
+            background-color: #10b981 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700 {
+            background-color: #ef4444 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* Mantener colores de texto en badges y totalizadores */
+          .text-white {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          .text-green-600,
+          .dark\\:text-green-400 {
+            color: #059669 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* Filas de tabla con fondo blanco pero indicadores con color */
+          tbody tr {
+            background-color: white !important;
+          }
+          
+          tbody tr td {
+            background-color: white !important;
+          }
+          
+          /* Excepción: mantener colores en badges dentro de celdas */
+          tbody tr td .bg-green-500,
+          tbody tr td .bg-green-600,
+          tbody tr td .bg-red-500,
+          tbody tr td .bg-red-600 {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* Fondos de tablas y contenedores - blanco pero mantener bordes */
+          .bg-white,
+          .dark\\:bg-gray-800 {
+            background: white !important;
+          }
+          
+          .bg-gray-100,
+          .bg-gray-200,
+          .dark\\:bg-gray-700 {
+            background: #f3f4f6 !important;
+          }
+          
+          /* Bordes visibles para tablas */
+          table,
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, ArrowLeft, Edit2, Trash2, Share2, MessageCircle } from 'lucide-react'
+import { Home, ArrowLeft, Edit2, Trash2, Printer } from 'lucide-react'
 import { obtenerLiquidacionPorId, actualizarLiquidacion, eliminarLiquidacion, Liquidacion } from '@/lib/liquidacion'
 import { getSocios } from '@/lib/socios'
 import { Socio } from '@/lib/supabase'
@@ -105,21 +105,10 @@ export default function LiquidacionExtractoPage() {
     }
   }
 
-  const handleCompartirWhatsApp = () => {
-    if (!liquidacion) return
-
-    const nombres = liquidacion.nombres_asociados?.join(', ') || 'Asociados'
-    const ahorroUtilidad = (liquidacion.total_cuotas || 0) * 30000 + (liquidacion.total_inscripciones || 0) + (liquidacion.total_utilidad || 0) - (liquidacion.total_comision || 0)
-    const deducciones = liquidacion.total_deducciones || 0
-    const neto = liquidacion.neto_entregar || 0
-
-    const mensaje = `Liquidación de ${nombres}\n\n` +
-      `Ahorro+Utilidad: $${ahorroUtilidad.toLocaleString()}\n` +
-      `Deducciones: $${deducciones.toLocaleString()}\n` +
-      `Recibes: $${neto.toLocaleString()}`
-
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(whatsappUrl, '_blank')
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    window.print()
   }
 
   if (loading) {
@@ -288,11 +277,12 @@ export default function LiquidacionExtractoPage() {
               <span>Editar</span>
             </button>
             <button
-              onClick={handleCompartirWhatsApp}
-              className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+              type="button"
+              onClick={handleImprimir}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
             >
-              <MessageCircle className="w-4 h-4" />
-              <span>WhatsApp</span>
+              <Printer className="w-4 h-4" />
+              <span>Imprimir / PDF</span>
             </button>
             <button
               onClick={handleEliminarLiquidacion}
@@ -400,6 +390,180 @@ export default function LiquidacionExtractoPage() {
           </div>
         )}
       </div>
+      <style jsx global>{`
+        @media print {
+          /* ELIMINAR EL 'RESET' DEL NAVEGADOR - PRIMERO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FIJAR FONDO OSCURO CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* OCULTAR SOLO INTERFAZ INNECESARIA */
+          .no-print,
+          button,
+          nav,
+          a,
+          select,
+          input {
+            display: none !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - BOX-SHADOW PARA FONDO OSCURO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gradient-to-br {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            color: white !important;
+          }
+          
+          /* TEXTOS VISIBLES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300 {
+            color: white !important;
+          }
+          
+          /* Textos en fondos oscuros - blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 * {
+            color: white !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main,
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+          
+          /* Tablas al 100% de ancho sin cortes */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          /* Texto negro para lectura óptima */
+          body,
+          .text-white,
+          .text-gray-400,
+          .text-gray-300,
+          .dark\\:text-white {
+            color: black !important;
+          }
+          
+          /* PRESERVAR COLORES DE BADGES Y ESTADOS */
+          .bg-blue-500,
+          .bg-blue-600,
+          .bg-blue-700 {
+            background-color: #3b82f6 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700,
+          .bg-red-900 {
+            background-color: #ef4444 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700 {
+            background-color: #10b981 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* Mantener colores de texto en badges */
+          .text-white {
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          .text-red-200,
+          .text-red-400 {
+            color: #dc2626 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          .text-blue-200 {
+            color: #1e40af !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
+          /* Fondos de tablas y contenedores - blanco pero mantener bordes */
+          .bg-white,
+          .bg-gray-800,
+          .bg-gray-700 {
+            background: white !important;
+          }
+          
+          .bg-gray-100,
+          .bg-gray-200 {
+            background: #f3f4f6 !important;
+          }
+          
+          /* Bordes visibles para tablas */
+          table,
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

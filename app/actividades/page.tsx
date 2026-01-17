@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Home, Plus, Share2, ArrowLeft } from 'lucide-react'
+import { Home, Plus, Printer, ArrowLeft } from 'lucide-react'
 import { Socio } from '@/lib/supabase'
 import { getSocios } from '@/lib/socios'
 import {
@@ -356,48 +356,12 @@ export default function ActividadesPage() {
   }
 
 
-  const handleShareWhatsApp = () => {
-    if (!actividadSeleccionada) return
-
-    let mensaje = `ACTIVIDAD: ${actividadSeleccionada.nombre}\n\n`
-    mensaje += `Fecha: ${actividadSeleccionada.fecha ? new Date(actividadSeleccionada.fecha).toLocaleDateString('es-ES') : 'Sin fecha'}\n`
-    mensaje += `Valor por carita: $${(actividadSeleccionada.valor || 0).toLocaleString()}\n`
-    mensaje += `Premio: $${(actividadSeleccionada.ganancia_total || 0).toLocaleString()}\n\n`
-    mensaje += `ESTADO DE CARITAS:\n\n`
-
-    // Agrupar pagos por socio
-    const pagosPorSocio = new Map<number, PagoActividad[]>()
-    pagos.forEach(pago => {
-      const socioId = pago.socio_id
-      if (!socioId) return
-      if (!pagosPorSocio.has(socioId)) {
-        pagosPorSocio.set(socioId, [])
-      }
-      pagosPorSocio.get(socioId)!.push(pago)
-    })
-
-    pagosPorSocio.forEach((pagosSocio, socioId) => {
-      const socio = socios.find(s => {
-        const id = typeof s.id === 'string' ? parseInt(s.id) : s.id
-        return id === socioId
-      })
-      const nombreSocio = socio?.nombre || `Socio ID ${socioId}`
-      // Si existe pago, está pagado
-      const pagadas = pagosSocio.length
-      const caritasSocio = caritas.filter(c => c.socio_id === socioId)
-      const total = Math.max(caritasSocio.length, pagadas)
-      const totalPagado = pagosSocio.reduce((sum, p) => sum + (p.monto || 0), 0)
-      mensaje += `${nombreSocio}:\n`
-      mensaje += `  Caritas: ${total} (${pagadas} pagadas, ${total - pagadas} pendientes)\n`
-      mensaje += `  Total pagado: $${totalPagado.toLocaleString()}\n\n`
-    })
-
-    const totalRecaudado = pagos.reduce((sum, p) => sum + (p.monto || 0), 0)
-    mensaje += `\nTotal Recaudado: $${totalRecaudado.toLocaleString()}\n`
-    mensaje += `Utilidad Neta: $${(actividadSeleccionada.utilidad_neta || 0).toLocaleString()}\n`
-
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(whatsappUrl, '_blank')
+  const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setTimeout(() => {
+      window.print()
+    }, 100)
   }
 
   if (loading) {
@@ -689,11 +653,12 @@ export default function ActividadesPage() {
                 <span>Volver</span>
               </button>
               <button
-                onClick={handleShareWhatsApp}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                type="button"
+                onClick={handleImprimir}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
               >
-                <Share2 className="w-4 h-4" />
-                <span>Compartir</span>
+                <Printer className="w-4 h-4" />
+                <span>Imprimir / PDF</span>
               </button>
             </div>
           </div>
@@ -925,5 +890,283 @@ export default function ActividadesPage() {
     )
   }
 
-  return null
+  return (
+    <>
+      {null}
+      <style jsx global>{`
+        @media print {
+          /* ELIMINAR EL 'RESET' DEL NAVEGADOR - PRIMERO */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* FIJAR FONDO OSCURO CON BOX-SHADOW - INYECCIÓN DIRECTA */
+          html,
+          body {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            background: #111827 !important;
+            color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* CONTENEDORES PRINCIPALES - BOX-SHADOW PARA FONDO OSCURO */
+          .min-h-screen,
+          body > div,
+          .bg-gray-900,
+          .dark\\:bg-gray-900,
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #111827 !important;
+            background-color: #111827 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-800,
+          .dark\\:bg-gray-800 {
+            box-shadow: inset 0 0 0 1000px #1f2937 !important;
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+          
+          .bg-gray-700,
+          .dark\\:bg-gray-700 {
+            box-shadow: inset 0 0 0 1000px #374151 !important;
+            background-color: #374151 !important;
+            color: white !important;
+          }
+          
+          /* CONTENEDORES CLAROS - MANTENER COLORES ORIGINALES */
+          .bg-blue-50 {
+            box-shadow: inset 0 0 0 1000px #eff6ff !important;
+            background-color: #eff6ff !important;
+            color: black !important;
+          }
+          
+          .bg-indigo-100 {
+            box-shadow: inset 0 0 0 1000px #e0e7ff !important;
+            background-color: #e0e7ff !important;
+            color: black !important;
+          }
+          
+          .bg-white {
+            box-shadow: inset 0 0 0 1000px #ffffff !important;
+            background-color: #ffffff !important;
+            color: black !important;
+          }
+          
+          /* OCULTAR INTERFAZ INNECESARIA */
+          nav, 
+          aside, 
+          button:not(.rounded-full):not([class*="rounded-full"]), 
+          .no-print,
+          a,
+          select,
+          input {
+            display: none !important; 
+          }
+          
+          /* EXCEPCIÓN: NO ocultar caritas y círculos de indicadores */
+          button.rounded-full,
+          button.w-6.h-6.rounded-full,
+          button[class*="rounded-full"],
+          .rounded-full,
+          .w-6.h-6.rounded-full,
+          span.rounded-full,
+          div.rounded-full {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+          }
+          
+          /* AJUSTAR CONTENEDOR AL PAPEL */
+          main, 
+          .container,
+          .min-h-screen,
+          body > div,
+          [class*="max-w"] {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 10px !important;
+          }
+          
+          /* TEXTOS VISIBLES - FORZAR COLORES */
+          .text-white,
+          .dark\\:text-white,
+          .text-gray-100,
+          .text-gray-200,
+          .text-gray-300 {
+            color: white !important;
+          }
+          
+          .text-gray-800,
+          .text-gray-900,
+          .text-black {
+            color: black !important;
+          }
+          
+          /* Textos en fondos oscuros - blanco */
+          .bg-gray-900 *,
+          .bg-gray-800 *,
+          .bg-gray-700 *,
+          .dark\\:bg-gray-900 *,
+          .dark\\:bg-gray-800 * {
+            color: white !important;
+          }
+          
+          /* Textos en fondos claros - negro */
+          .bg-white *,
+          .bg-blue-50 *,
+          .bg-indigo-100 * {
+            color: black !important;
+          }
+          
+          /* Tablas al 100% de ancho sin cortes */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+          
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          thead {
+            display: table-header-group !important;
+          }
+          
+          /* FORZAR CARITAS Y CÍRCULOS - INYECCIÓN DIRECTA CON BOX-SHADOW */
+          /* Verde - Pagado */
+          .bg-green-500,
+          .bg-green-600,
+          .bg-green-700,
+          button[class*="bg-green"],
+          .rounded-full.bg-green-500,
+          button.rounded-full[class*="bg-green"] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1000px #10b981 !important;
+            background-color: #10b981 !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Amarillo - Pendiente */
+          .bg-yellow-500,
+          .bg-yellow-600,
+          .bg-yellow-700,
+          button[class*="bg-yellow"],
+          .rounded-full.bg-yellow-500,
+          button.rounded-full[class*="bg-yellow"] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1000px #eab308 !important;
+            background-color: #eab308 !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Rojo - Mora */
+          .bg-red-500,
+          .bg-red-600,
+          .bg-red-700,
+          button[class*="bg-red"],
+          .rounded-full.bg-red-500,
+          button.rounded-full[class*="bg-red"] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1000px #ef4444 !important;
+            background-color: #ef4444 !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Gris - Retirado */
+          .bg-gray-400,
+          .bg-gray-500,
+          .bg-gray-300,
+          button[class*="bg-gray"]:not([class*="bg-gray-200"]):not([class*="bg-gray-100"]),
+          .rounded-full.bg-gray-400,
+          button.rounded-full[class*="bg-gray"]:not([class*="bg-gray-200"]):not([class*="bg-gray-100"]) {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1000px #9ca3af !important;
+            background-color: #9ca3af !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Azul - Actividades */
+          .bg-blue-500,
+          .bg-blue-600,
+          button[class*="bg-blue"],
+          .rounded-full.bg-blue-500,
+          button.rounded-full[class*="bg-blue"] {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1000px #3b82f6 !important;
+            background-color: #3b82f6 !important;
+            opacity: 1 !important;
+            display: inline-flex !important;
+            visibility: visible !important;
+          }
+          
+          /* Texto blanco en círculos */
+          .rounded-full .text-white,
+          button.rounded-full .text-white,
+          .bg-green-500 .text-white,
+          .bg-yellow-500 .text-white,
+          .bg-red-500 .text-white,
+          .bg-gray-400 .text-white,
+          .bg-blue-500 .text-white {
+            color: white !important;
+          }
+          
+          /* Emojis visibles */
+          .rounded-full span,
+          button.rounded-full span {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: inline-flex !important;
+          }
+          
+          /* Tablas */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          
+          tbody tr,
+          tbody tr td {
+            box-shadow: inset 0 0 0 1000px #ffffff !important;
+            background-color: #ffffff !important;
+            color: black !important;
+          }
+          
+          /* Círculos dentro de tablas mantienen color */
+          tbody tr td .rounded-full,
+          tbody tr td button.rounded-full {
+            box-shadow: inset 0 0 0 1000px !important;
+          }
+          
+          table,
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+          }
+          
+        }
+      `}</style>
+    </>
+  )
 }
