@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -7,11 +9,39 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file')
 }
 
+// Cliente legacy (para compatibilidad con código existente)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
   }
 })
+
+// Cliente singleton para el navegador (Next.js 14 App Router)
+// Esto evita la advertencia "Multiple GoTrueClient instances detected"
+let browserClient: SupabaseClient | null = null
+
+export function getBrowserClient(): SupabaseClient {
+  // Crear la instancia solo una vez (patrón singleton)
+  // Esto evita que Next.js cree una segunda instancia durante el 'Hot Reload' de desarrollo
+  if (browserClient) return browserClient
+
+  browserClient = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        detectSessionInUrl: true,
+        persistSession: true,
+        // Esto evita que se cree una instancia si ya hay una activa en el window
+        autoRefreshToken: true
+      }
+    }
+  )
+  
+  return browserClient
+}
 
 // Tipo para el Socio (tabla: asociados)
 // NOTA: La tabla asociados usa id SERIAL (INTEGER), pero Supabase puede devolverlo como string

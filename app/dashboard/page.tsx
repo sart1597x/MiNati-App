@@ -2,11 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { getBrowserClient } from '@/lib/supabase'
 import { Home, UserPlus, Receipt, AlertCircle, DollarSign, Wallet, LogOut, Calculator, Settings } from 'lucide-react'
 
 export default function DashboardPage() {
   const [anioVigente, setAnioVigente] = useState<number | null>(null)
+  const [supabase, setSupabase] = useState<ReturnType<typeof getBrowserClient> | null>(null)
 
+  // Asegurar que el cliente solo se obtenga en el lado del cliente
+  // Esto evita problemas durante el Hot Reload de Next.js
+  useEffect(() => {
+    // Solo ejecutar en el cliente
+    if (typeof window !== 'undefined') {
+      const client = getBrowserClient()
+      setSupabase(client)
+    }
+  }, [])
 
   useEffect(() => {
     const fetchAnio = async () => {
@@ -23,10 +34,20 @@ export default function DashboardPage() {
     fetchAnio()
   }, [])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (!supabase) return // Esperar a que el cliente esté listo
+    
     if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-      // Aquí puedes agregar lógica de logout si es necesario
-      window.location.href = '/'
+      try {
+        // Cerrar sesión y limpiar todas las cookies de Supabase
+        await supabase.auth.signOut()
+        // Redirección forzada con recarga completa para limpiar memoria del navegador
+        window.location.href = '/login'
+      } catch (error) {
+        console.error('Error al cerrar sesión:', error)
+        // Forzar redirección incluso si hay error
+        window.location.href = '/login'
+      }
     }
   }
 

@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
+import { obtenerAnioVigente } from '@/lib/configuracion'
 
 export default async function Home() {
-  const anio = await obtenerAnioVigente()
+  await obtenerAnioVigente()
   redirect('/dashboard')
 }
 
