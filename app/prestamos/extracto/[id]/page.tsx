@@ -383,10 +383,10 @@ export default function ExtractoPrestamoPage() {
         if (mov.dias_causados > 0) {
           mensaje += `   Días: ${mov.dias_causados}\n`
         }
-        if (mov.interes_causado > 0) {
+        if (mov?.interes_causado && mov.interes_causado > 0) {
           mensaje += `   Interés: $${mov.interes_causado.toLocaleString()}\n`
         }
-        if (mov.abono_capital > 0) {
+        if (mov?.abono_capital && mov.abono_capital > 0) {
           mensaje += `   Abono Capital: $${mov.abono_capital.toLocaleString()}\n`
         }
         mensaje += `   Capital Pendiente: $${mov.capital_pendiente.toLocaleString()}\n`
