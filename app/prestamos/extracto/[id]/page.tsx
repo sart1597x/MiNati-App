@@ -383,10 +383,10 @@ export default function ExtractoPrestamoPage() {
         if (mov.dias_causados > 0) {
           mensaje += `   Días: ${mov.dias_causados}\n`
         }
-        if (mov?.interes_causado && mov.interes_causado > 0) {
+        if (mov?.interes_causado > 0) {
           mensaje += `   Interés: $${mov.interes_causado.toLocaleString()}\n`
         }
-        if (mov?.abono_capital && mov.abono_capital > 0) {
+        if (mov?.abono_capital > 0) {
           mensaje += `   Abono Capital: $${mov.abono_capital.toLocaleString()}\n`
         }
         mensaje += `   Capital Pendiente: $${mov.capital_pendiente.toLocaleString()}\n`
@@ -667,11 +667,15 @@ export default function ExtractoPrestamoPage() {
                           {mov.dias_causados > 0 ? mov.dias_causados : '-'}
                         </td>
                         <td className="px-3 py-3 text-right text-gray-300">
-                          {mov.interes_causado > 0 ? `$${mov.interes_causado.toLocaleString()}` : '$ -'}
-                        </td>
-                        <td className="px-3 py-3 text-right text-orange-300 font-semibold">
-                          {mov.interes_pendiente > 0 ? `$${mov.interes_pendiente.toLocaleString()}` : '$ -'}
-                        </td>
+  {mov?.interes_causado && mov.interes_causado > 0 
+    ? `$${mov.interes_causado.toLocaleString()}` 
+    : '$ -'}
+</td>
+<td className="px-3 py-3 text-right text-orange-300 font-semibold">
+  {mov?.interes_pendiente && mov.interes_pendiente > 0 
+    ? `$${mov.interes_pendiente.toLocaleString()}` 
+    : '$ -'}
+</td>
                         <td className="px-3 py-3 text-right text-gray-300">
                           {mov.abono_capital > 0 ? `$${mov.abono_capital.toLocaleString()}` : '$ -'}
                         </td>
