@@ -119,9 +119,9 @@ export default function PrestamosPage() {
           <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
             {view === 'menu' && 'Préstamos'}
             {view === 'nuevo' && 'Nuevo Préstamo'}
-            {view === 'pago' && 'Pago de Préstamo'}
-            {view === 'base-datos' && 'Base de Datos de Préstamos'}
-            {view === 'extracto' && 'Extracto Individual'}
+            {(view as any) === 'pago' && 'Pago de Préstamo'}
+            {(view as any) === 'base-datos' && 'Base de Datos de Préstamos'}
+            {(view as any) === 'extracto' && 'Extracto Individual'}
           </h1>
           <Link
             href="/dashboard"
@@ -373,7 +373,7 @@ export default function PrestamosPage() {
         )}
 
         {/* Vista: Pago de Préstamo */}
-        {view === 'pago' && (
+        {(view as any) === 'pago' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
             <div className="mb-6">
               <button
