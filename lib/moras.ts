@@ -3,8 +3,9 @@
 // Última actualización: 2024-01-XX - Forzar refresco de caché
 import { supabase } from './supabase'
 import { Socio, PagoCuota } from './supabase'
-import { generarFechasVencimiento, calcularEstadoCuota } from './pagos'
+import { generarFechasVencimiento, calcularEstadoCuota, getPagosSocio } from './pagos'
 import { obtenerUltimoSaldo, crearMovimientoCaja } from './caja'
+import { obtenerConfiguracionNacional } from './configuracion'
 
 export interface Mora {
   id: number | string // Puede ser UUID (string) o número según la BD
@@ -57,7 +58,10 @@ export async function obtenerMorasActivas(): Promise<Mora[]> {
   const { data: socios } = await supabase
     .from('asociados')
     .select('*')
-  
+  // Obtener estado real de pago de las cuotas
+const { data: cuotasPagos } = await supabase
+.from('cuotas_pagos')
+.select('cedula, numero_cuota, pagado, fecha_pago')
   // Mapear a la estructura esperada
   const moras: Mora[] = morasData.map((mora: any) => {
     // IMPORTANTE: moras.id es UUID (string), NO convertir a número
@@ -71,19 +75,29 @@ export async function obtenerMorasActivas(): Promise<Mora[]> {
       return String(s.id) === String(asociadoId) || s.id === asociadoId
     })
     
+    const cuotaPago = cuotasPagos?.find(
+      c =>
+        c.cedula === socio?.cedula &&
+        c.numero_cuota === mora.cuota
+    )
+    
     return {
-      id: moraId, // UUID (string) - NO convertir a número
+      id: moraId,
       cedula: socio?.cedula || '',
       nombre: socio?.nombre || 'Desconocido',
-      fecha_pago: mora.fecha_pago,
+    
+      // 👇 CLAVE: solo mostrar fecha si la CUOTA está pagada
+      fecha_pago: cuotaPago?.pagado ? cuotaPago.fecha_pago : null,
+    
       numero_cuota: mora.cuota,
       dias_mora: mora.dias_mora,
       valor_mora: parseFloat(mora.valor_mora) || VALOR_MORA_DIARIA,
       total_sancion: parseFloat(mora.total_sancion) || 0,
       valor_pagado: parseFloat(mora.valor_pagado) || 0,
       resta: parseFloat(mora.resta) || 0,
-      fecha_vencimiento: mora.fecha_pago || new Date().toISOString().split('T')[0]
+      fecha_vencimiento: mora.fecha_pago
     }
+    
   })
   
   return moras
@@ -688,4 +702,425 @@ export async function eliminarRegistroMora(historialId: number | string): Promis
   
   console.log('✅ Registro de historial_moras eliminado correctamente')
 }
+// ======================================================
+// ACTUALIZAR MORAS EXISTENTES (RECALCULAR DÍAS Y VALORES)
+// ======================================================
+export async function actualizarMorasExistentes(): Promise<void> {
+  console.log('🔁 Actualizando moras existentes...')
 
+  const fechaActual = new Date()
+  //const fechaActual = new Date('2026-01-21')
+  fechaActual.setHours(0, 0, 0, 0)
+
+  const config = await obtenerConfiguracionNacional()
+  const valorDiaMora = config?.valor_dia_mora ?? VALOR_MORA_DIARIA
+
+  const { data: moras, error } = await supabase
+    .from('moras')
+    .select('*')
+    .gt('resta', 0)
+
+  if (!moras) return
+  
+  const fechasVencimiento = generarFechasVencimiento()
+
+  const pagosPorCedula = new Map<string, Set<number>>()
+
+  const { data: pagos } = await supabase
+    .from('cuotas_pagos')
+    .select('cedula, numero_cuota')
+  
+  pagos?.forEach(p => {
+    if (!pagosPorCedula.has(p.cedula)) {
+      pagosPorCedula.set(p.cedula, new Set())
+    }
+    pagosPorCedula.get(p.cedula)!.add(p.numero_cuota)
+  })
+
+  for (const mora of moras) {
+    const { data: asociado } = await supabase
+    .from('asociados')
+    .select('cedula')
+    .eq('id', mora.asociado_id)
+    .maybeSingle()
+  
+  if (!asociado?.cedula) {
+    console.warn('⚠️ No se pudo obtener cédula del asociado', mora.asociado_id)
+    continue
+  }
+  
+  // 🔒 2. Verificar si la CUOTA está pagada
+  const { data: cuotaPagada } = await supabase
+    .from('cuotas_pagos')
+    .select('id')
+    .eq('cedula', asociado.cedula)
+    .eq('numero_cuota', mora.cuota)
+    .eq('pagado', true)
+    .maybeSingle()
+  
+  if (cuotaPagada) {
+    console.log(
+      `🧊 Mora congelada (cuota pagada) → cédula ${asociado.cedula}, cuota ${mora.cuota}`
+    )
+    continue
+  }
+    const fechaVenc = fechasVencimiento[mora.cuota - 1]
+    if (!fechaVenc) continue
+    const fechaVencNorm = new Date(
+      fechaVenc.getFullYear(),
+      fechaVenc.getMonth(),
+      fechaVenc.getDate(),
+      0, 0, 0, 0
+    )
+
+    const fechaInicioMora = new Date(fechaVenc)
+    fechaInicioMora.setDate(fechaInicioMora.getDate() + 1)
+
+    const diffMs = fechaActual.getTime() - fechaInicioMora.getTime()
+    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDias <= 0) continue
+
+    const diasMora = Math.min(MAX_DIAS_MORA, diffDias)
+    const totalSancion = Math.min(
+      MAX_TOTAL_SANCION,
+      diasMora * valorDiaMora
+    )
+// ⛔️ ESTA ES LA CLAVE QUE FALTABA
+
+
+// ⬇️ Si NO está pagada, permitir que la mora aumente
+if (diasMora <= mora.dias_mora) {
+  continue
+}
+    const nuevaResta = Math.max(
+      0,
+      totalSancion - (mora.valor_pagado || 0)
+    )
+
+    await supabase
+      .from('moras')
+      .update({
+        dias_mora: diasMora,
+        total_sancion: totalSancion,
+        resta: nuevaResta,
+        valor_mora: valorDiaMora
+      })
+      .eq('id', mora.id)
+  }
+
+  console.log('✅ Moras existentes actualizadas')
+}
+
+// ======================================================
+// GENERACIÓN AUTOMÁTICA DE MORAS POR FECHA
+// ======================================================
+/**
+ * Genera automáticamente las moras para todas las cuotas vencidas sin pago
+ * REGLA: Se ejecuta al cargar el módulo "Control de Moras"
+ * REGLA: Proceso IDEMPOTENTE - puede ejecutarse muchas veces sin duplicar datos
+ * REGLA: Solo crea moras si NO existe pago y NO existe mora previa
+ */
+export async function generarMorasAutomaticas(): Promise<number> {
+  try {
+    await actualizarMorasExistentes()
+    console.log('🔄 Iniciando generación automática de moras...')
+    
+    // 1. Obtener fecha actual del sistema
+    const fechaActual = new Date()
+    //const fechaActual = new Date('2026-01-21')
+    fechaActual.setHours(0, 0, 0, 0) // Normalizar a medianoche
+    
+    // 2. Obtener configuración para valor_dia_mora
+    const config = await obtenerConfiguracionNacional()
+    const valorDiaMora = config?.valor_dia_mora ?? VALOR_MORA_DIARIA
+    const maxDiasMora = MAX_DIAS_MORA
+    const maxMontoMora = MAX_TOTAL_SANCION
+    
+    console.log('📋 Configuración:', { valorDiaMora, maxDiasMora, maxMontoMora })
+    
+    // 3. Obtener todos los asociados activos
+    const { data: asociados, error: errorAsociados } = await supabase
+      .from('asociados')
+      .select('id, cedula, nombre, activo')
+      .eq('activo', true)
+    
+    if (errorAsociados) {
+      console.error('❌ Error obteniendo asociados:', errorAsociados)
+      throw errorAsociados
+    }
+    
+    if (!asociados || asociados.length === 0) {
+      console.log('ℹ️ No hay asociados activos')
+      return 0
+    }
+    
+    console.log(`📊 Procesando ${asociados.length} asociados activos...`)
+    
+    // 4. Obtener todas las fechas de vencimiento
+    const fechasVencimiento = generarFechasVencimiento()
+    
+    // 5. Obtener todas las moras existentes para verificación rápida
+    const { data: morasExistentes } = await supabase
+      .from('moras')
+      .select('asociado_id, cuota')
+    
+    // Crear un Set para búsqueda rápida: "asociado_id-cuota"
+    const morasExistentesSet = new Set<string>()
+    morasExistentes?.forEach(mora => {
+      const key = `${mora.asociado_id}-${mora.cuota}`
+      morasExistentesSet.add(key)
+    })
+    
+    let morasCreadas = 0
+    
+    // 6. Para cada asociado, verificar sus cuotas
+    for (const asociado of asociados) {
+      const asociadoId = asociado.id
+      const cedula = asociado.cedula
+      
+      console.log(`\n👤 Evaluando asociado: ${asociado.nombre} (${cedula})`)
+      
+      // Obtener pagos del asociado
+      const pagos = await getPagosSocio(cedula)
+      
+      // Crear un Set de cuotas con pago registrado (NO solo pagadas, sino cualquier registro)
+      const cuotasConPagoSet = new Set<number>()
+      pagos.forEach(pago => {
+        if (pago.numero_cuota) {
+          cuotasConPagoSet.add(pago.numero_cuota)
+          console.log(`  📝 Cuota ${pago.numero_cuota} tiene registro de pago (pagado: ${pago.pagado})`)
+        }
+      })
+      
+      // 7. Para cada cuota (1-24), verificar si necesita mora
+      for (let numeroCuota = 1; numeroCuota <= 24; numeroCuota++) {
+        // Verificar si ya existe mora para este asociado y cuota
+        const keyMora = `${asociadoId}-${numeroCuota}`
+        if (morasExistentesSet.has(keyMora)) {
+          console.log(`  ⏭️ Cuota ${numeroCuota}: Ya existe mora registrada`)
+          continue // Ya existe mora, saltar
+        }
+        
+        // REGLA: Verificar si existe CUALQUIER registro de pago para esta cuota (no solo si está pagado)
+        if (cuotasConPagoSet.has(numeroCuota)) {
+          console.log(`  ⏭️ Cuota ${numeroCuota}: Existe registro de pago (aunque no esté pagado)`)
+          continue // Existe registro de pago, saltar
+        }
+        
+        // Obtener fecha de vencimiento de la cuota
+        const fechaVencimiento = fechasVencimiento[numeroCuota - 1]
+        if (!fechaVencimiento) {
+          console.log(`  ⏭️ Cuota ${numeroCuota}: Fecha de vencimiento no encontrada`)
+          continue // Fecha de vencimiento no encontrada, saltar
+        }
+        
+        // Normalizar fecha de vencimiento (local, sin UTC)
+        const fechaVencNorm = new Date(
+          fechaVencimiento.getFullYear(),
+          fechaVencimiento.getMonth(),
+          fechaVencimiento.getDate(),
+          0, 0, 0, 0
+        )
+        
+        // Formatear fechas para logs
+        const fechaActualStr = fechaActual.toISOString().split('T')[0]
+        const fechaVencStr = fechaVencNorm.toISOString().split('T')[0]
+        
+        console.log(`  📅 Cuota ${numeroCuota}:`)
+        console.log(`     Fecha vencimiento: ${fechaVencStr}`)
+        console.log(`     Fecha actual: ${fechaActualStr}`)
+        console.log(`     Comparación: ${fechaActual.getTime()} > ${fechaVencNorm.getTime()} = ${fechaActual.getTime() > fechaVencNorm.getTime()}`)
+        
+        // REGLA: Solo crear mora si fecha actual > fecha de vencimiento (estrictamente mayor)
+        if (fechaActual.getTime() <= fechaVencNorm.getTime()) {
+          console.log(`  ⏭️ Cuota ${numeroCuota}: Aún no vence (fecha actual <= fecha vencimiento)`)
+          continue // Aún no vence, saltar
+        }
+        
+        // 8. Calcular días de mora
+        // dias_mora = diferencia directa entre hoy y fecha de vencimiento
+const diffMs = fechaActual.getTime() - fechaVencNorm.getTime()
+const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+// REGLA DE NEGOCIO: el primer día vencido cuenta como 1 día de mora
+const diasMoraBase = Math.max(1, diffDias)
+
+        
+        console.log(`     Días desde inicio mora: ${diffDias}`)
+        
+               
+        // Aplicar tope de días de mora
+// Aplicar tope de días de mora
+const diasMora = Math.min(maxDiasMora, diasMoraBase)
+
+        
+        // Calcular total_sancion = dias_mora * valor_dia_mora (con tope)
+        const totalSancion = Math.min(maxMontoMora, diasMora * valorDiaMora)
+        
+        console.log(`     ✅ CUOTA VENCIDA - Generando mora:`)
+        console.log(`        Días de mora: ${diasMora}`)
+        console.log(`        Total sanción: $${totalSancion.toLocaleString()}`)
+        
+        // 9. Crear registro de mora
+        // REGLA: Verificar SIEMPRE que no exista mora previa antes de insertar (doble verificación)
+        const { data: moraExistente } = await supabase
+          .from('moras')
+          .select('id')
+          .eq('asociado_id', asociadoId)
+          .eq('cuota', numeroCuota)
+          .maybeSingle()
+        
+        if (moraExistente) {
+          console.log(`  ⏭️ Cuota ${numeroCuota}: Mora ya existe en BD (doble verificación)`)
+          continue // Ya existe, saltar (idempotencia)
+        }
+        
+        // Formatear fecha_pago (usar fecha actual como referencia)
+        const fechaPagoTexto = fechaActual.toISOString().split('T')[0]
+        
+        // Ajustar fecha sumando +1 día para evitar desfase UTC (igual que en registrarPago)
+        const [y, m, d] = fechaPagoTexto.split('-').map(Number)
+        const fechaAjustada = new Date(y, m - 1, d + 1, 12, 0, 0)
+        const fechaAjustadaTexto = `${fechaAjustada.getFullYear()}-${String(fechaAjustada.getMonth() + 1).padStart(2, '0')}-${String(fechaAjustada.getDate()).padStart(2, '0')}`
+        
+        const moraData = {
+          asociado_id: asociadoId,
+          cuota: numeroCuota,
+          dias_mora: diasMora,
+          valor_mora: valorDiaMora,
+          total_sancion: totalSancion,
+          valor_pagado: 0, // Aún no se ha pagado
+          resta: totalSancion, // Total pendiente
+          fecha_pago: fechaAjustadaTexto
+        }
+        
+        const { error: errorInsert } = await supabase
+          .from('moras')
+          .insert([moraData])
+        
+        if (errorInsert) {
+          console.error(`❌ Error creando mora para asociado ${asociadoId}, cuota ${numeroCuota}:`, errorInsert)
+          continue // Continuar con siguiente cuota
+        }
+        // 🔒 REGISTRO EN MEMORIA PARA EVITAR DUPLICADOS EN EL MISMO CICLO
+        morasExistentesSet.add(`${asociadoId}-${numeroCuota}`)
+
+        console.log(`✅ Mora creada: ${asociado.nombre} - Cuota ${numeroCuota} - ${diasMora} días - $${totalSancion.toLocaleString()}`)
+        morasCreadas++
+      }
+    }
+    
+    console.log(`✅ Generación automática completada. Moras creadas: ${morasCreadas}`)
+    return morasCreadas
+    
+  } catch (error: any) {
+    console.error('❌ Error en generación automática de moras:', error)
+    throw error
+  }
+}
+// ======================================================
+// RECALCULAR MORA CUANDO SE CAMBIA FECHA DE PAGO DE CUOTA
+// ======================================================
+export async function recalcularMoraPorPagoCuota(
+  cedula: string,
+  numeroCuota: number,
+  fechaPagoTexto: string
+): Promise<void> {
+  console.log(
+    `🔁 Recalculando mora por cambio de fecha → ${cedula}, cuota ${numeroCuota}, fecha ${fechaPagoTexto}`
+  )
+
+  // 1. Obtener asociado
+  const { data: asociado } = await supabase
+    .from('asociados')
+    .select('id')
+    .eq('cedula', cedula)
+    .maybeSingle()
+
+  if (!asociado) {
+    console.warn('⚠️ Asociado no encontrado para recalcular mora')
+    return
+  }
+
+  const asociadoId = asociado.id
+
+  // 2. Obtener mora existente
+  const { data: moraExistente } = await supabase
+    .from('moras')
+    .select('*')
+    .eq('asociado_id', asociadoId)
+    .eq('cuota', numeroCuota)
+    .maybeSingle()
+
+  if (!moraExistente) {
+    console.log('ℹ️ No existe mora para esta cuota, nada que recalcular')
+    return
+  }
+
+  // 3. Obtener fecha de vencimiento
+  const fechasVencimiento = generarFechasVencimiento()
+  const fechaVenc = fechasVencimiento[numeroCuota - 1]
+
+  if (!fechaVenc) {
+    console.warn('⚠️ No se pudo obtener fecha de vencimiento')
+    return
+  }
+
+  const fechaVencNorm = new Date(
+    fechaVenc.getFullYear(),
+    fechaVenc.getMonth(),
+    fechaVenc.getDate(),
+    0, 0, 0, 0
+  )
+
+  const [y, m, d] = fechaPagoTexto.split('-').map(Number)
+  const fechaPago = new Date(y, m - 1, d, 0, 0, 0, 0)
+
+  // 4. Calcular días de mora
+  if (fechaPago.getTime() <= fechaVencNorm.getTime()) {
+    // ❄️ Si ya no hay mora, eliminar registro
+    await supabase
+      .from('moras')
+      .delete()
+      .eq('id', moraExistente.id)
+
+    console.log('❄️ Mora eliminada (fecha corregida, ya no hay mora)')
+    return
+  }
+
+  const diffMs = fechaPago.getTime() - fechaVencNorm.getTime()
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const diasMora = Math.min(MAX_DIAS_MORA, Math.max(1, diffDias))
+
+  const config = await obtenerConfiguracionNacional()
+  const valorDiaMora = config?.valor_dia_mora ?? VALOR_MORA_DIARIA
+  const totalSancion = Math.min(MAX_TOTAL_SANCION, diasMora * valorDiaMora)
+
+  // 5. Actualizar mora
+  await supabase
+    .from('moras')
+    .update({
+      dias_mora: diasMora,
+      valor_mora: valorDiaMora,
+      total_sancion: totalSancion,
+      resta: totalSancion - (moraExistente.valor_pagado || 0)
+    })
+    .eq('id', moraExistente.id)
+
+  console.log(
+    `✅ Mora recalculada → ${diasMora} días, $${totalSancion.toLocaleString()}`
+  )
+}
+// ======================================================
+// ACTUALIZAR MORAS EXISTENTES (RECALCULAR DÍAS)
+// ======================================================
+/**
+ * Recalcula días de mora y total_sancion para moras activas
+ * REGLAS:
+ * - SOLO moras con resta > 0
+ * - NO crea moras nuevas
+ * - NO toca caja
+ * - NO toca historial
+ * - IDEMPOTENTE
+ */

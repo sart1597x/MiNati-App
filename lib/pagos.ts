@@ -1,6 +1,8 @@
 import { supabase, PagoCuota } from './supabase'
 import { crearMovimientoCaja, obtenerUltimoSaldo } from './caja'
 import { obtenerConfiguracionNacional } from './configuracion'
+import { recalcularMoraPorPagoCuota } from './moras'
+
 
 // ======================================================
 // CONSTANTES DE NEGOCIO
@@ -414,6 +416,12 @@ export async function actualizarPagoCuota(
   if (error) throw error
 
   console.log('✅ Pago actualizado (fecha cambiada, caja NO modificada)')
+// 🔁 Recalcular mora porque cambió la fecha de pago
+await recalcularMoraPorPagoCuota(
+  cedula,
+  numeroCuota,
+  fechaTexto
+)
 
   return data
 }

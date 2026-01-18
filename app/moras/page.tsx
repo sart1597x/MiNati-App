@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Home, Printer, FolderOpen, Calendar, Trash2 } from 'lucide-react'
-import { Mora, obtenerMorasActivas, registrarPagoMora } from '@/lib/moras'
+import { Mora, obtenerMorasActivas, registrarPagoMora, generarMorasAutomaticas, actualizarMorasExistentes } from '@/lib/moras'
 import { supabase } from '@/lib/supabase'
 import { crearMovimientoCaja, obtenerUltimoSaldo } from '@/lib/caja'
 
@@ -17,12 +17,27 @@ export default function MorasPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    // Cargar moras al montar el componente
-    loadMoras()
+    // Función para inicializar: generar moras automáticas y luego cargar
+    const inicializar = async () => {
+      try {
+        // 1. Generar moras automáticas por fecha (proceso idempotente)
+        await generarMorasAutomaticas()
+        await actualizarMorasExistentes()
+        // 2. Cargar moras activas
+        await loadMoras()
+      } catch (error: any) {
+        console.error('Error en inicialización:', error)
+        // Si falla la generación automática, aún intentar cargar moras existentes
+        await loadMoras()
+      }
+    }
+    
+    // Ejecutar inicialización
+    inicializar()
     
     // Recargar moras cuando la ventana recibe foco (cuando el usuario vuelve a esta pestaña)
     const handleFocus = () => {
-      loadMoras()
+      inicializar()
     }
     
     window.addEventListener('focus', handleFocus)
@@ -410,8 +425,11 @@ export default function MorasPage() {
                       <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">{index + 1}</td>
                       <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">{mora.nombre}</td>
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
-                        {mora.fecha_pago ? new Date(mora.fecha_pago).toLocaleDateString('es-ES') : '-'}
-                      </td>
+  {mora.fecha_pago
+    ? mora.fecha_pago.split('-').reverse().join('/')
+    : '-'}
+</td>
+
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{mora.numero_cuota}</td>
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{mora.dias_mora}</td>
                       <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">${mora.valor_mora.toLocaleString()}</td>
