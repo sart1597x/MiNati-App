@@ -151,6 +151,15 @@ export default function PagosPage() {
           montoMora: parseFloat(moraPendiente.total_sancion) || parseFloat(moraPendiente.resta) || 0
         }
       }
+      
+      // REGLA: Si la cuota está pagada Y no hay mora pendiente (resta = 0 o no existe),
+      // la carita debe mostrar estado "pagado / paz y salvo"
+      if (pago?.pagado) {
+        return {
+          estado: 'pagado' as const,
+          montoMora: 0
+        }
+      }
     }
 
     // 2. Calcular estado usando la MISMA lógica que pagos.ts
@@ -618,18 +627,7 @@ return {
                       value={fechaPago}
                       onChange={(e) => {
                         setFechaPago(e.target.value)
-                        
-                        // RECALCULAR EN TIEMPO REAL usando la función centralizada
-                        // PROHIBIDO calcular mora en el frontend
-                        if (selectedCuota) {
-                          const fechaVencimiento = fechasVencimiento[selectedCuota.numeroCuota - 1]
-                          // Normalizar fecha usando helper para evitar desfase UTC
-                          const fechaPagoDate = dateFromInput(e.target.value)
-                          
-                          // Usar getEstadoCuota para recalcular (única fuente de verdad)
-                          const estado = getEstadoCuota(selectedCuota.cedula, selectedCuota.numeroCuota, fechaPagoDate)
-                          setMontoMoraCalculado(estado.montoMora)
-                        }
+                        // El estado se recalcula automáticamente en tiempo real usando estadoSeleccionado
                       }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       required
@@ -644,9 +642,9 @@ return {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Cuota: ${(configuracion?.valor_cuota ?? VALOR_CUOTA_DEFAULT).toLocaleString()}
                     </p>
-                    {montoMoraCalculado > 0 && (
+                    {estadoSeleccionado.montoMora > 0 && (
                       <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-semibold">
-                        ⚠️ Este pago generará una deuda de ${montoMoraCalculado.toLocaleString()} en el Control de Moras (no se cobra ahora)
+                        ⚠️ Este pago generará una deuda de ${estadoSeleccionado.montoMora.toLocaleString()} en el Control de Moras (no se cobra ahora)
                       </p>
                     )}
                   </div>
