@@ -532,7 +532,7 @@ return {
         {/* Tablero de Socios - 6 Columnas con 41 filas cada una */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 sm:p-4">
           <div className="overflow-x-auto w-full">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2 min-w-max">
+            <div className="grid grid-cols-6 gap-4 min-w-[1400px]">
               {dividirEnColumnas(listaExpandida).map((columna, colIndex) => (
                 <div key={colIndex} className="min-w-[180px]">
                   {/* Encabezado de columna */}
