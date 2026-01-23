@@ -364,6 +364,20 @@ export default function ActividadesPage() {
     return listaExpandida
   }
 
+  // Dividir lista en bloques de 41 para las 6 columnas
+  const dividirEnColumnas = (lista: Array<{ socio: Socio, cupoIndex: number, numeroFila: number }>) => {
+    const columnas: Array<Array<{ socio: Socio, cupoIndex: number, numeroFila: number }>> = []
+    const TAMANO_BLOQUE = 41
+    
+    for (let i = 0; i < 6; i++) {
+      const inicio = i * TAMANO_BLOQUE
+      const fin = inicio + TAMANO_BLOQUE
+      columnas.push(lista.slice(inicio, fin))
+    }
+    
+    return columnas
+  }
+
 
   const handleImprimir = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
@@ -711,90 +725,93 @@ export default function ActividadesPage() {
             </div>
           </div>
 
-          {/* Tablero de Socios - Layout Vertical con CSS Grid */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 overflow-x-auto">
-            <div className="inline-block min-w-full">
-              {/* Header */}
-              <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10" style={{ display: 'grid', gridTemplateRows: 'repeat(1, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)' }}>
-                <div className="min-w-[160px]">
-                  <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
-                    ASOCIADO
-                  </div>
-                  <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
-                    <div className="w-6 text-center">ID</div>
-                    {Array.from({ length: Math.min(maxCaritas, 5) }).map((_, i) => (
-                      <div key={i} className="w-6 text-center">C{i + 1}</div>
-                    ))}
-                    {maxCaritas > 5 && <div className="w-6 text-center">+</div>}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Lista de socios con CSS Grid - máximo 40 filas por columna */}
-              <div style={{ display: 'grid', gridTemplateRows: 'repeat(40, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)', gap: '0.125rem' }}>
-                {listaExpandida.map((item) => {
-                  const cantidadCupos = item.socio.cantidad_cupos || 1
-                  const nombreDisplay = cantidadCupos > 1 
-                    ? `${item.socio.nombre} ${item.cupoIndex + 1}`
-                    : item.socio.nombre
-                  
-                  const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : item.socio.id
-                  const estaRetirado = item.socio.activo === false
-                  
-                  // Obtener todas las caritas de este socio
-                  const caritasSocio = socioId ? getCaritasSocio(socioId) : []
-                  const cantidadCaritasSocio = Math.max(caritasSocio.length, actividadSeleccionada.cantidad || 1)
-                  
-                  return (
-                    <div
-                      key={`${item.socio.id}-${item.cupoIndex}`}
-                      className="border-b border-gray-200 dark:border-gray-700 pb-1 text-[11px] min-w-[160px]"
-                    >
-                      <div className={`font-medium mb-0.5 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
-                        {nombreDisplay}
+          {/* Tablero de Socios - 6 Columnas con 41 filas cada una */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 sm:p-4">
+            <div className="overflow-x-auto w-full">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2 min-w-max">
+                {dividirEnColumnas(listaExpandida).map((columna, colIndex) => (
+                  <div key={colIndex} className="min-w-[180px]">
+                    {/* Encabezado de columna */}
+                    <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-1 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                      <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
+                        ASOCIADO
                       </div>
-                      <div className="flex gap-1 items-center">
-                        <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                          {item.socio.cedula}
-                        </div>
-                        {Array.from({ length: Math.min(cantidadCaritasSocio, 5) }).map((_, i) => {
-                          const numeroCarita = i + 1
-                          const estado = socioId ? getEstadoCarita(socioId, numeroCarita) : 'pendiente'
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => !estaRetirado && socioId && handleCaritaClick(socioId, numeroCarita)}
-                              disabled={estaRetirado}
-                              className={`w-6 h-6 rounded-full ${getCaritaColor(estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
-                              title={estaRetirado ? 'Socio retirado' : `Carita ${numeroCarita} - ${estado}`}
-                            >
-                              <span className="text-[10px]">{getCaritaEmoji(estado, estaRetirado)}</span>
-                            </button>
-                          )
-                        })}
-                        {cantidadCaritasSocio > 5 && (
-                          <div className="w-6 text-center text-[10px] text-gray-600 dark:text-gray-400">
-                            +{cantidadCaritasSocio - 5}
-                          </div>
-                        )}
-                        {cantidadCaritasSocio === 0 && (
-                          <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] text-gray-400">
-                            ⚪
-                          </div>
-                        )}
-                        {!estaRetirado && socioId && (
-                          <button
-                            onClick={() => handleAgregarCarita(socioId)}
-                            className="w-6 h-6 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors flex-shrink-0 text-[10px]"
-                            title="Agregar carita"
-                          >
-                            +
-                          </button>
-                        )}
+                      <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                        <div className="w-6 text-center">ID</div>
+                        <div className="flex-1 text-center">NOMBRE</div>
+                        {Array.from({ length: Math.min(maxCaritas, 5) }).map((_, i) => (
+                          <div key={i} className="w-5 text-center">C{i + 1}</div>
+                        ))}
+                        {maxCaritas > 5 && <div className="w-5 text-center">+</div>}
                       </div>
                     </div>
-                  )
-                })}
+                    
+                    {/* Lista de socios - máximo 41 filas */}
+                    <div className="space-y-0">
+                      {columna.map((item) => {
+                        const cantidadCupos = item.socio.cantidad_cupos || 1
+                        const nombreDisplay = cantidadCupos > 1 
+                          ? `${item.socio.nombre} ${item.cupoIndex + 1}`
+                          : item.socio.nombre
+                        
+                        const socioId = typeof item.socio.id === 'string' ? parseInt(item.socio.id) : item.socio.id
+                        const estaRetirado = item.socio.activo === false
+                        
+                        // Obtener todas las caritas de este socio
+                        const caritasSocio = socioId ? getCaritasSocio(socioId) : []
+                        const cantidadCaritasSocio = Math.max(caritasSocio.length, actividadSeleccionada.cantidad || 1)
+                        
+                        return (
+                          <div
+                            key={`${item.socio.id}-${item.cupoIndex}`}
+                            className="border-b border-gray-200 dark:border-gray-700 py-0.5 text-[10px] flex gap-1 items-center"
+                          >
+                            <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[9px] shrink-0">
+                              {item.socio.cedula}
+                            </div>
+                            <div className={`flex-1 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                              {nombreDisplay}
+                            </div>
+                            {Array.from({ length: Math.min(cantidadCaritasSocio, 5) }).map((_, i) => {
+                              const numeroCarita = i + 1
+                              const estado = socioId ? getEstadoCarita(socioId, numeroCarita) : 'pendiente'
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => !estaRetirado && socioId && handleCaritaClick(socioId, numeroCarita)}
+                                  disabled={estaRetirado}
+                                  className={`w-5 h-5 rounded-full ${getCaritaColor(estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${estaRetirado ? '' : 'cursor-pointer'}`}
+                                  title={estaRetirado ? 'Socio retirado' : `Carita ${numeroCarita} - ${estado}`}
+                                >
+                                  <span className="text-[9px]">{getCaritaEmoji(estado, estaRetirado)}</span>
+                                </button>
+                              )
+                            })}
+                            {cantidadCaritasSocio > 5 && (
+                              <div className="w-5 text-center text-[9px] text-gray-600 dark:text-gray-400 shrink-0">
+                                +{cantidadCaritasSocio - 5}
+                              </div>
+                            )}
+                            {cantidadCaritasSocio === 0 && (
+                              <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[9px] text-gray-400 shrink-0">
+                                ⚪
+                              </div>
+                            )}
+                            {!estaRetirado && socioId && (
+                              <button
+                                onClick={() => handleAgregarCarita(socioId)}
+                                className="w-5 h-5 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors flex-shrink-0 text-[9px]"
+                                title="Agregar carita"
+                              >
+                                +
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
