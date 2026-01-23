@@ -82,7 +82,10 @@ export default function PagosPage() {
       }
       
       const [sociosData, pagosData] = await Promise.all([
-        getSocios(),
+        supabase.from('asociados').select('*').order('cedula', { ascending: true }).then(({ data, error }) => {
+          if (error) throw error
+          return data || []
+        }),
         getAllPagos()
       ])
       setSocios(sociosData)
@@ -557,7 +560,7 @@ return {
                     </div>
                     <div className="flex gap-1 items-center">
                       <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                        {item.numeroFila}
+                        {item.socio.cedula}
                       </div>
                       <button
                         onClick={() => !estaRetirado && handleCaritaClick(item.socio.cedula, cuotasDelMes[0])}

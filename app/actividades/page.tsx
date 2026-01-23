@@ -62,9 +62,13 @@ export default function ActividadesPage() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const { supabase } = await import('@/lib/supabase')
       const [actividadesData, sociosData] = await Promise.all([
         obtenerActividades(),
-        getSocios()
+        supabase.from('asociados').select('*').order('cedula', { ascending: true }).then(({ data, error }) => {
+          if (error) throw error
+          return data || []
+        })
       ])
       setActividades(Array.isArray(actividadesData) ? actividadesData : [])
       setSocios(Array.isArray(sociosData) ? sociosData : [])
@@ -556,7 +560,7 @@ export default function ActividadesPage() {
                       onChange={(e) => setValor(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       min="0"
-                      step="1000"
+                      step="any"
                       required
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -592,7 +596,7 @@ export default function ActividadesPage() {
                       onChange={(e) => setPremio(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       min="0"
-                      step="1000"
+                      step="any"
                       required
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -746,7 +750,7 @@ export default function ActividadesPage() {
                       </div>
                       <div className="flex gap-1 items-center">
                         <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                          {item.numeroFila}
+                          {item.socio.cedula}
                         </div>
                         {Array.from({ length: Math.min(cantidadCaritasSocio, 5) }).map((_, i) => {
                           const numeroCarita = i + 1

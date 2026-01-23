@@ -545,7 +545,7 @@ export default function LiquidacionPage() {
                 <table className="w-full table-auto text-sm">
                   <thead>
                     <tr className="bg-gray-700 border-b border-gray-600">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">#</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">NOMBRE</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">ESTADO</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">ACCIONES</th>
@@ -590,7 +590,7 @@ export default function LiquidacionPage() {
                 <table className="w-full table-auto text-sm">
                   <thead>
                     <tr className="bg-gray-700 border-b border-gray-600">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">#</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">ASOCIADOS</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">NETO ENTREGAR</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">FECHA</th>

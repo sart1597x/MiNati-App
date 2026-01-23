@@ -26,8 +26,16 @@ export default function InscripcionesPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      // Cargar socios (todos los socios existentes)
-      const sociosData = await getSocios()
+      // Cargar socios (todos los socios existentes) ordenados por cédula
+      const { supabase } = await import('@/lib/supabase')
+      const { data: sociosData, error: errorSocios } = await supabase
+        .from('asociados')
+        .select('*')
+        .order('cedula', { ascending: true })
+      
+      if (errorSocios) {
+        throw errorSocios
+      }
       
       // Obtener IDs de socios existentes
       const idsSocios = new Set(
@@ -361,7 +369,7 @@ export default function InscripcionesPage() {
                     </div>
                     <div className="flex gap-1 items-center">
                       <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[10px]">
-                        {item.numeroFila}
+                        {item.socio.cedula}
                       </div>
                       <button
                         disabled={estaRetirado}
