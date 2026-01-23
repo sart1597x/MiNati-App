@@ -425,23 +425,23 @@ return {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-8">
-      <div className="max-w-[95vw] mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4 sm:p-8 overflow-x-hidden w-full max-w-full">
+      <div className="w-full max-w-full mx-auto">
         {/* Navegación */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 dark:text-white shrink-0">
             Registro de Cuotas
           </h1>
-          <div className="flex gap-3 items-center">
-            <div className="flex items-center gap-2">
-              <label htmlFor="mesSelector" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className="flex flex-wrap gap-2 sm:gap-3 items-center w-full sm:w-auto">
+            <div className="flex items-center gap-2 shrink-0">
+              <label htmlFor="mesSelector" className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                 Mes:
               </label>
               <select
                 id="mesSelector"
                 value={mesSeleccionado}
                 onChange={(e) => setMesSeleccionado(Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white shrink-0"
               >
                 {nombresMeses.map((mes, index) => (
                   <option key={index} value={index}>
@@ -452,32 +452,35 @@ return {
             </div>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
             >
-              <Home className="w-4 h-4" />
-              <span>Volver al Home</span>
+              <Home className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">Volver al Home</span>
+              <span className="sm:hidden">Home</span>
             </Link>
             <button
               type="button"
               onClick={handleImprimir}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print shrink-0 whitespace-nowrap"
             >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir / PDF</span>
+              <Printer className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">Imprimir / PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             <Link
               href="/moras"
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
             >
-              <AlertCircle className="w-4 h-4" />
-              <span>Ver Moras</span>
+              <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">Ver Moras</span>
+              <span className="sm:hidden">Moras</span>
             </Link>
           </div>
         </div>
 
         {/* Título Central del Mes */}
         <div className="text-center mb-6">
-          <h2 className="text-5xl font-bold text-gray-800 dark:text-white">
+          <h2 className="text-3xl sm:text-5xl font-bold text-gray-800 dark:text-white">
             {nombresMeses[mesSeleccionado].toUpperCase()}
           </h2>
         </div>
@@ -505,8 +508,9 @@ return {
         </div>
 
         {/* Tablero de Socios - Layout Vertical con CSS Grid */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 overflow-x-auto">
-          <div className="inline-block min-w-full">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 sm:p-4">
+          <div className="overflow-x-auto w-full">
+            <div className="inline-block min-w-full">
             {/* Header */}
             <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-2 sticky top-0 bg-white dark:bg-gray-800 z-10" style={{ display: 'grid', gridTemplateRows: 'repeat(1, min-content)', gridAutoFlow: 'column', gridAutoColumns: 'minmax(160px, 1fr)' }}>
               <div className="min-w-[160px]">
@@ -576,6 +580,7 @@ return {
                 )
               })}
             </div>
+          </div>
           </div>
         </div>
 

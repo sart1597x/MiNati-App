@@ -354,50 +354,54 @@ export default function MorasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4 sm:p-8 overflow-x-hidden w-full max-w-full">
+      <div className="w-full max-w-full mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 dark:text-white shrink-0">
             Control de Moras
           </h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               type="button"
               onClick={handleImprimir}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print shrink-0 whitespace-nowrap"
             >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir / PDF</span>
+              <Printer className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">Imprimir / PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             <Link
               href="/pagos"
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
             >
-              <Calendar className="w-4 h-4" />
-              <span>📅 Registrar Cuotas</span>
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">📅 Registrar Cuotas</span>
+              <span className="sm:hidden">Cuotas</span>
             </Link>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
             >
-              <Home className="w-4 h-4" />
-              <span>🏠 Home</span>
+              <Home className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">🏠 Home</span>
+              <span className="sm:hidden">Home</span>
             </Link>
             <Link
               href="/moras/historial"
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
             >
-              <FolderOpen className="w-4 h-4" />
-              <span>📂 Historial de Moras</span>
+              <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">📂 Historial de Moras</span>
+              <span className="sm:hidden">Historial</span>
             </Link>
           </div>
         </div>
 
         {/* Tabla de Moras */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto">
+          <div className="overflow-x-auto w-full">
+            <table className="min-w-[700px] w-full table-auto">
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">ID</th>

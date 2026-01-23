@@ -17,8 +17,8 @@ export default async function RootLayout({
 }>) {
   const anio = await obtenerAnioVigente();
   return (
-    <html lang="es">
-      <body className="antialiased">{children}</body>
+    <html lang="es" className="overflow-x-hidden">
+      <body className="antialiased overflow-x-hidden w-full max-w-full">{children}</body>
     </html>
   );
 }

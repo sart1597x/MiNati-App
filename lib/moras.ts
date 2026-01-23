@@ -2,6 +2,7 @@
 // Columnas correctas: fecha_pago, valor_pagado, nombre_asociado
 // Última actualización: 2024-01-XX - Forzar refresco de caché
 import { supabase } from './supabase'
+
 import { Socio, PagoCuota } from './supabase'
 import { generarFechasVencimiento, calcularEstadoCuota, getPagosSocio } from './pagos'
 import { obtenerUltimoSaldo, crearMovimientoCaja } from './caja'

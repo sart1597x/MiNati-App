@@ -281,21 +281,21 @@ export default function InscripcionesPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-8">
       <div className="max-w-[95vw] mx-auto">
         {/* Navegación */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-800 dark:text-white">
             Control de Inscripciones
           </h1>
-          <div className="flex gap-3 items-center">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center w-full sm:w-auto">
             <Link
               href="/socios"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <span>⬅ Volver</span>
             </Link>
             <button
               type="button"
               onClick={handleImprimir}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors no-print w-full sm:w-auto"
             >
               <Printer className="w-4 h-4" />
               <span>Imprimir / PDF</span>

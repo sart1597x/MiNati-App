@@ -194,22 +194,22 @@ export default function GastosBancariosPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-8">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div className="flex items-center gap-3">
             <DollarSign className="w-8 h-8 text-white" />
-            <h1 className="text-4xl font-bold text-white">Gastos Bancarios (4xMil)</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold text-white">Gastos Bancarios (4xMil)</h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <Home className="w-4 h-4" />
               <span>Home</span>
             </Link>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Regresar</span>
