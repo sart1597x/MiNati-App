@@ -26,16 +26,22 @@ export default function InscripcionesPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      // Cargar socios (todos los socios existentes) ordenados por cédula
+      // Cargar socios (todos los socios existentes) ordenados numéricamente por cédula
       const { supabase } = await import('@/lib/supabase')
-      const { data: sociosData, error: errorSocios } = await supabase
+      const { data: sociosDataRaw, error: errorSocios } = await supabase
         .from('asociados')
         .select('*')
-        .order('cedula', { ascending: true })
       
       if (errorSocios) {
         throw errorSocios
       }
+      
+      // Ordenar numéricamente por cédula
+      const sociosData = (sociosDataRaw || []).sort((a, b) => {
+        const cedulaA = Number(a.cedula) || 0
+        const cedulaB = Number(b.cedula) || 0
+        return cedulaA - cedulaB
+      })
       
       // Obtener IDs de socios existentes
       const idsSocios = new Set(

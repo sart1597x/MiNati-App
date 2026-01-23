@@ -65,9 +65,14 @@ export default function ActividadesPage() {
       const { supabase } = await import('@/lib/supabase')
       const [actividadesData, sociosData] = await Promise.all([
         obtenerActividades(),
-        supabase.from('asociados').select('*').order('cedula', { ascending: true }).then(({ data, error }) => {
+        supabase.from('asociados').select('*').then(({ data, error }) => {
           if (error) throw error
-          return data || []
+          // Ordenar numéricamente por cédula
+          return (data || []).sort((a, b) => {
+            const cedulaA = Number(a.cedula) || 0
+            const cedulaB = Number(b.cedula) || 0
+            return cedulaA - cedulaB
+          })
         })
       ])
       setActividades(Array.isArray(actividadesData) ? actividadesData : [])

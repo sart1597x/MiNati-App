@@ -82,9 +82,14 @@ export default function PagosPage() {
       }
       
       const [sociosData, pagosData] = await Promise.all([
-        supabase.from('asociados').select('*').order('cedula', { ascending: true }).then(({ data, error }) => {
+        supabase.from('asociados').select('*').then(({ data, error }) => {
           if (error) throw error
-          return data || []
+          // Ordenar numéricamente por cédula
+          return (data || []).sort((a, b) => {
+            const cedulaA = Number(a.cedula) || 0
+            const cedulaB = Number(b.cedula) || 0
+            return cedulaA - cedulaB
+          })
         }),
         getAllPagos()
       ])
