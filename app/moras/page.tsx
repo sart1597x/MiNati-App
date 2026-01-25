@@ -417,14 +417,27 @@ export default function MorasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {moras.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      No hay moras activas en este momento
-                    </td>
-                  </tr>
-                ) : (
-                  moras.map((mora, index) => (
+                {(() => {
+                  // Ordenar moras: primero por cuota, luego por cédula
+                  const morasOrdenadas = [...moras].sort((a, b) => {
+                    // 1. Ordenar por Cuota
+                    if (a.numero_cuota !== b.numero_cuota) {
+                      return a.numero_cuota - b.numero_cuota;
+                    }
+                    // 2. Ordenar por Cédula (buscando en el objeto relacionado)
+                    const cedA = parseInt(a.asociados?.cedula || a.cedula || '0');
+                    const cedB = parseInt(b.asociados?.cedula || b.cedula || '0');
+                    return cedA - cedB;
+                  });
+
+                  return morasOrdenadas.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        No hay moras activas en este momento
+                      </td>
+                    </tr>
+                  ) : (
+                    morasOrdenadas.map((mora, index) => (
                     <tr key={`mora-${mora.id}-${mora.numero_cuota}-${index}`} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">{index + 1}</td>
                       <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">{mora.nombre}</td>
@@ -460,7 +473,8 @@ export default function MorasPage() {
                       </td>
                     </tr>
                   ))
-                )}
+                  );
+                })()}
               </tbody>
             </table>
           </div>
