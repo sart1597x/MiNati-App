@@ -1,59 +1,76 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { Home, ArrowLeft, Search, Plus, X, Eye, Trash2, Calculator } from 'lucide-react'
+import { Home, Search, X, Calculator, Printer, Edit, Trash2, History, ArrowLeft } from 'lucide-react'
 import { Socio } from '@/lib/supabase'
 import { getSocios } from '@/lib/socios'
 import {
-  calcularUtilidadBrutaRepartible,
-  obtenerTotalAsociados,
-  obtenerCapitalPendienteAsociado,
   crearLiquidacion,
   obtenerLiquidaciones,
   obtenerControlLiquidaciones,
   eliminarLiquidacion,
-  Liquidacion
+  calcularLiquidacionAsociados,
+  obtenerCuotasPagadasAsociado,
+  obtenerInscripcionAsociado,
+  Liquidacion,
+  CalculoLiquidacion,
+  ControlLiquidacion
 } from '@/lib/liquidacion'
 import { obtenerConfiguracionNacional } from '@/lib/configuracion'
+
+// Usar el tipo exportado desde liquidacion.ts
+type AsociadoControl = ControlLiquidacion
 
 interface AsociadoSeleccionado {
   id: number | string
   nombre: string
   cedula: string
-  capitalPendiente: number
 }
 
 export default function LiquidacionPage() {
-  const [view, setView] = useState<'nueva' | 'historial'>('nueva')
   const [socios, setSocios] = useState<Socio[]>([])
+  const [controlLiquidaciones, setControlLiquidaciones] = useState<AsociadoControl[]>([])
+  const [liquidaciones, setLiquidaciones] = useState<Liquidacion[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [sociosFiltrados, setSociosFiltrados] = useState<Socio[]>([])
-  const [listaEspera, setListaEspera] = useState<AsociadoSeleccionado[]>([])
+  const [asociadosSeleccionados, setAsociadosSeleccionados] = useState<AsociadoSeleccionado[]>([])
   const [loading, setLoading] = useState(true)
   const [calculando, setCalculando] = useState(false)
-  
-  // Inputs globales (solo 4xMil Egreso, el Operativo se obtiene automáticamente)
-  const [impuesto4xMilEgreso, setImpuesto4xMilEgreso] = useState('0.4')
-  const [totalAsociados, setTotalAsociados] = useState(0)
-  const [utilidadBrutaRepartible, setUtilidadBrutaRepartible] = useState(0)
-  
-  // Cálculos por cuota
-  const [utilidadPorCuota, setUtilidadPorCuota] = useState(0)
-  const [comisionAdminPorCuota, setComisionAdminPorCuota] = useState(0)
-  const [porcentajeAdministracion, setPorcentajeAdministracion] = useState(8) // Porcentaje desde configuración
-  
-  // Cálculos de liquidación
-  const [subtotal, setSubtotal] = useState(0)
-  const [descuento4xMil, setDescuento4xMil] = useState(0)
-  const [totalDeducciones, setTotalDeducciones] = useState(0)
-  const [netoEntregar, setNetoEntregar] = useState(0)
-  const [showPreLiquidacion, setShowPreLiquidacion] = useState(false)
+  const [porcentajeAdministracion, setPorcentajeAdministracion] = useState(8)
+  const [calculoLiquidacion, setCalculoLiquidacion] = useState<CalculoLiquidacion | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [showModalDetalle, setShowModalDetalle] = useState(false)
+  const [showModalLiquidacionIndividual, setShowModalLiquidacionIndividual] = useState(false)
+  const [asociadoDetalle, setAsociadoDetalle] = useState<AsociadoControl | null>(null)
+  const [asociadoLiquidacionIndividual, setAsociadoLiquidacionIndividual] = useState<AsociadoControl | null>(null)
+  const [calculoIndividual, setCalculoIndividual] = useState<CalculoLiquidacion | null>(null)
+  const [calculandoIndividual, setCalculandoIndividual] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  
-  // Historial
-  const [liquidaciones, setLiquidaciones] = useState<Liquidacion[]>([])
-  const [controlLiquidaciones, setControlLiquidaciones] = useState<any[]>([])
+  const [ingresosDetalle, setIngresosDetalle] = useState<CalculoLiquidacion | null>(null)
+
+  // Ordenar asociados por cédula (numérico)
+  const asociadosOrdenados = useMemo(() => {
+    return [...controlLiquidaciones].sort((a, b) => {
+      const cedulaA = parseInt(a.cedula) || 0
+      const cedulaB = parseInt(b.cedula) || 0
+      return cedulaA - cedulaB
+    })
+  }, [controlLiquidaciones])
+
+  // Dividir en 6 columnas (similar a inscripciones)
+  const dividirEnColumnas = (lista: AsociadoControl[]) => {
+    const columnas: Array<Array<AsociadoControl>> = []
+    const TAMANO_BLOQUE = 41
+    
+    for (let i = 0; i < 6; i++) {
+      const inicio = i * TAMANO_BLOQUE
+      const fin = inicio + TAMANO_BLOQUE
+      columnas.push(lista.slice(inicio, fin))
+    }
+    
+    return columnas
+  }
 
   useEffect(() => {
     loadData()
@@ -72,31 +89,27 @@ export default function LiquidacionPage() {
   }, [busqueda, socios])
 
   useEffect(() => {
-    if (view === 'nueva' && totalAsociados > 0 && utilidadBrutaRepartible > 0) {
-      calcularPorCuota().catch(error => {
-        console.error('Error en calcularPorCuota:', error)
-      })
+    if (asociadosSeleccionados.length > 0 && !showHistory) {
+      calcularLiquidacionDinamica()
+    } else {
+      setCalculoLiquidacion(null)
     }
-  }, [totalAsociados, utilidadBrutaRepartible])
-
-  useEffect(() => {
-    if (listaEspera.length > 0) {
-      calcularLiquidacion()
-    }
-  }, [listaEspera, utilidadPorCuota, comisionAdminPorCuota, impuesto4xMilEgreso])
+  }, [asociadosSeleccionados, porcentajeAdministracion, showHistory])
 
   const loadData = async () => {
     try {
       setLoading(true)
-      const [sociosData, totalAsoc] = await Promise.all([
+      const [sociosData, controlData, liquidacionesData, config] = await Promise.all([
         getSocios(),
-        obtenerTotalAsociados()
+        obtenerControlLiquidaciones(),
+        obtenerLiquidaciones(),
+        obtenerConfiguracionNacional()
       ])
       setSocios(sociosData)
-      setTotalAsociados(totalAsoc)
-      
-      if (view === 'historial') {
-        await loadHistorial()
+      setControlLiquidaciones(controlData as any)
+      setLiquidaciones(liquidacionesData)
+      if (config?.porcentaje_administracion) {
+        setPorcentajeAdministracion(config.porcentaje_administracion)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -106,169 +119,86 @@ export default function LiquidacionPage() {
     }
   }
 
-  const loadHistorial = async () => {
-    try {
-      const liqData = await obtenerLiquidaciones()
-      setLiquidaciones(liqData)
-      
-      // Cargar control de liquidaciones por separado
-      try {
-        const controlData = await obtenerControlLiquidaciones()
-        setControlLiquidaciones(controlData)
-      } catch (error) {
-        console.error('Error loading control:', error)
-        setControlLiquidaciones([])
-      }
-    } catch (error) {
-      console.error('Error loading historial:', error)
-    }
-  }
-
-  const calcularUtilidadBruta = async () => {
+  const calcularLiquidacionDinamica = async () => {
+    if (asociadosSeleccionados.length === 0) return
+    
     try {
       setCalculando(true)
-      // Ya no necesita el parámetro, obtiene automáticamente de gastos bancarios
-      const utilidad = await calcularUtilidadBrutaRepartible()
-      setUtilidadBrutaRepartible(utilidad)
+      const cedulas = asociadosSeleccionados.map(a => a.cedula)
+      const calculo = await calcularLiquidacionAsociados(cedulas, porcentajeAdministracion)
+      setCalculoLiquidacion(calculo)
     } catch (error) {
-      console.error('Error calculating utilidad bruta:', error)
-      alert('Error al calcular utilidad bruta')
+      console.error('Error calculando liquidación:', error)
+      alert('Error al calcular la liquidación')
     } finally {
       setCalculando(false)
     }
   }
 
-  const calcularPorCuota = async () => {
-    if (totalAsociados === 0) return
-    
-    // Obtener porcentaje de administración desde configuración nacional (id = 1)
-    let porcentajeAdmin = 8 // Fallback por defecto: 8%
-    try {
-      const config = await obtenerConfiguracionNacional()
-      if (config && config.porcentaje_administracion != null) {
-        porcentajeAdmin = config.porcentaje_administracion
-      }
-    } catch (error) {
-      console.warn('Error obteniendo porcentaje de administración, usando fallback 8%:', error)
-    }
-    
-    // Guardar el porcentaje en estado para mostrar en UI
-    setPorcentajeAdministracion(porcentajeAdmin)
-    
-    // Convertir porcentaje a decimal (ej: 8 -> 0.08)
-    const porcentajeDecimal = porcentajeAdmin / 100
-    
-    const utilidadPorCuotaCalc = utilidadBrutaRepartible / totalAsociados
-    const comisionPorCuotaCalc = (utilidadBrutaRepartible * porcentajeDecimal) / totalAsociados
-    
-    setUtilidadPorCuota(utilidadPorCuotaCalc)
-    setComisionAdminPorCuota(comisionPorCuotaCalc)
-  }
-
-  const agregarAListaEspera = async (socio: Socio) => {
-    // Verificar si ya está en la lista
-    if (listaEspera.some(s => s.id === socio.id)) {
-      alert('Este asociado ya está en la lista de espera')
+  const agregarAsociado = (socio: Socio) => {
+    if (asociadosSeleccionados.some(s => s.id === socio.id)) {
+      alert('Este asociado ya está seleccionado')
       return
     }
     
-    try {
-      const socioId = typeof socio.id === 'string' ? parseInt(socio.id) : socio.id
-      const capitalPendiente = await obtenerCapitalPendienteAsociado(socioId || 0)
-      
-      setListaEspera([...listaEspera, {
-        id: socio.id!,
-        nombre: socio.nombre,
-        cedula: socio.cedula,
-        capitalPendiente
-      }])
-      setBusqueda('')
-      setSociosFiltrados([])
-    } catch (error) {
-      console.error('Error getting capital pendiente:', error)
-      setListaEspera([...listaEspera, {
-        id: socio.id!,
-        nombre: socio.nombre,
-        cedula: socio.cedula,
-        capitalPendiente: 0
-      }])
-      setBusqueda('')
-      setSociosFiltrados([])
-    }
+    setAsociadosSeleccionados([...asociadosSeleccionados, {
+      id: socio.id!,
+      nombre: socio.nombre,
+      cedula: socio.cedula
+    }])
+    setBusqueda('')
+    setSociosFiltrados([])
   }
 
-  const removerDeListaEspera = (id: number | string) => {
-    setListaEspera(listaEspera.filter(s => s.id !== id))
+  const removerAsociado = (id: number | string) => {
+    setAsociadosSeleccionados(asociadosSeleccionados.filter(s => s.id !== id))
   }
 
-  const calcularLiquidacion = async () => {
-    if (listaEspera.length === 0) return
-    
-    const numCuotas = listaEspera.length
-    const numInscripciones = listaEspera.length * 1 // Una inscripción por asociado
-    
-    const subtotalCalc = (numCuotas * 30000) + (numInscripciones * 10000) + (numCuotas * utilidadPorCuota) - (numCuotas * comisionAdminPorCuota)
-    const descuento4xMilCalc = subtotalCalc * (parseFloat(impuesto4xMilEgreso) / 1000)
-    const totalDeduccionesCalc = listaEspera.reduce((sum, s) => sum + s.capitalPendiente, 0)
-    const netoCalc = subtotalCalc - descuento4xMilCalc - totalDeduccionesCalc
-    
-    setSubtotal(subtotalCalc)
-    setDescuento4xMil(descuento4xMilCalc)
-    setTotalDeducciones(totalDeduccionesCalc)
-    setNetoEntregar(netoCalc)
-  }
-
-  const handleGenerarPreLiquidacion = async () => {
-    if (listaEspera.length === 0) {
-      alert('Agrega al menos un asociado a la lista de espera')
+  const handleLiquidar = async () => {
+    if (asociadosSeleccionados.length === 0) {
+      alert('Selecciona al menos un asociado')
       return
     }
     
-    // Calcular automáticamente la utilidad bruta si no está calculada
-    if (utilidadBrutaRepartible === 0) {
-      await calcularUtilidadBruta()
-    }
-    
-    await calcularLiquidacion()
-    setShowPreLiquidacion(true)
-  }
-
-  const handleFinalizarLiquidacion = async () => {
-    if (listaEspera.length === 0) {
-      alert('No hay asociados en la lista de espera')
+    if (!calculoLiquidacion) {
+      alert('Error: No se pudo calcular la liquidación')
       return
     }
     
     try {
       setSubmitting(true)
       
-      // Obtener el 4xMil Operativo de gastos bancarios
+      // Obtener 4xMil Operativo
       const { obtenerTotal4xMilOperativo } = await import('@/lib/gastos')
       const total4xMilOperativo = await obtenerTotal4xMilOperativo()
       
-      const liquidacionData = {
-        nombres_asociados: listaEspera.map(s => s.nombre),
-        total_cuotas: listaEspera.length,
-        total_inscripciones: listaEspera.length * 10000,
-        total_utilidad: listaEspera.length * utilidadPorCuota,
-        total_comision: listaEspera.length * comisionAdminPorCuota,
-        subtotal: subtotal,
-        descuento_4xmil: descuento4xMil,
-        total_deducciones: totalDeducciones,
-        neto_entregar: netoEntregar,
-        impuesto_4xmil_operativo: total4xMilOperativo,
-        impuesto_4xmil_egreso: parseFloat(impuesto4xMilEgreso) || 0.4,
-        utilidad_bruta_repartible: utilidadBrutaRepartible,
+      // Calcular totales correctamente
+      let totalCuotas = 0
+      let totalInscripciones = 0
+      for (const asociado of asociadosSeleccionados) {
+        totalCuotas += await obtenerCuotasPagadasAsociado(asociado.cedula)
+        totalInscripciones += await obtenerInscripcionAsociado(asociado.cedula)
+      }
+      
+      const liquidacionFinal = {
+        nombres_asociados: asociadosSeleccionados.map(a => a.nombre),
+        total_cuotas: totalCuotas,
+        total_inscripciones: Number(totalInscripciones.toFixed(2)),
+        total_utilidad: calculoLiquidacion.utilidadesPorAsociados,
+        total_comision: calculoLiquidacion.comisionAdministracion,
+        subtotal: calculoLiquidacion.aPagar,
+        descuento_4xmil: calculoLiquidacion.impuesto4xMilDesembolso,
+        total_deducciones: calculoLiquidacion.deducciones,
+        neto_entregar: calculoLiquidacion.totalAPagar,
         fecha_liquidacion: new Date().toISOString().split('T')[0]
       }
       
-      await crearLiquidacion(liquidacionData)
+      await crearLiquidacion(liquidacionFinal as any)
       
-      alert('Liquidación finalizada exitosamente')
-      setListaEspera([])
-      setShowPreLiquidacion(false)
-      setBusqueda('')
-      await loadHistorial()
+      alert('Liquidación creada exitosamente')
+      setAsociadosSeleccionados([])
+      setCalculoLiquidacion(null)
+      await loadData()
     } catch (error) {
       console.error('Error finalizing liquidacion:', error)
       alert('Error al finalizar la liquidación')
@@ -277,18 +207,191 @@ export default function LiquidacionPage() {
     }
   }
 
-  const handleEliminarLiquidacion = async (liquidacionId: number | string) => {
-    if (!confirm('¿Estás seguro de revertir esta liquidación? Esta acción devolverá los asociados al estado "Por Liquidar".')) {
+  const handleVerDetalle = async (asociado: AsociadoControl) => {
+    setAsociadoDetalle(asociado)
+    setShowModalDetalle(true)
+    // Calcular ingresos para mostrar en el modal
+    try {
+      const calculo = await calcularLiquidacionAsociados([asociado.cedula], porcentajeAdministracion)
+      setIngresosDetalle(calculo)
+    } catch (error) {
+      console.error('Error calculando ingresos para detalle:', error)
+    }
+  }
+
+  const handleSeleccionarDesdeCarita = (asociado: AsociadoControl) => {
+    // Buscar el socio completo
+    const socio = socios.find(s => s.cedula === asociado.cedula)
+    if (socio) {
+      agregarAsociado(socio)
+      setShowHistory(false) // Volver a la vista de simulador
+    }
+  }
+
+  const handleCaritaClick = async (asociado: AsociadoControl) => {
+    const liquidacion = getLiquidacionAsociado(asociado)
+    const estado = getEstadoCarita(asociado)
+    
+    // Si está liquidado (verde), mostrar modal de detalle
+    if (estado === 'liquidado' && liquidacion) {
+      handleVerDetalle(asociado)
+    } 
+    // Si es amarillo (pendiente) o gris (retirado), abrir modal de liquidación individual
+    else if (estado === 'pendiente' || estado === 'retirado') {
+      setAsociadoLiquidacionIndividual(asociado)
+      setShowModalLiquidacionIndividual(true)
+      await calcularLiquidacionIndividual(asociado)
+    }
+  }
+
+  const calcularLiquidacionIndividual = async (asociado: AsociadoControl) => {
+    try {
+      setCalculandoIndividual(true)
+      const calculo = await calcularLiquidacionAsociados([asociado.cedula], porcentajeAdministracion)
+      setCalculoIndividual(calculo)
+    } catch (error) {
+      console.error('Error calculando liquidación individual:', error)
+      alert('Error al calcular la liquidación')
+    } finally {
+      setCalculandoIndividual(false)
+    }
+  }
+
+  const handleConfirmarLiquidacionIndividual = async () => {
+    if (!asociadoLiquidacionIndividual || !calculoIndividual) {
+      alert('Error: No se pudo calcular la liquidación')
       return
     }
     
     try {
+      setSubmitting(true)
+      
+      // Obtener 4xMil Operativo
+      const { obtenerTotal4xMilOperativo } = await import('@/lib/gastos')
+      const total4xMilOperativo = await obtenerTotal4xMilOperativo()
+      
+      // Calcular totales para este asociado
+      const totalCuotas = await obtenerCuotasPagadasAsociado(asociadoLiquidacionIndividual.cedula)
+      const totalInscripciones = await obtenerInscripcionAsociado(asociadoLiquidacionIndividual.cedula)
+      
+      const liquidacionFinal = {
+        nombres_asociados: [asociadoLiquidacionIndividual.nombre],
+        total_cuotas: totalCuotas,
+        total_inscripciones: Number(totalInscripciones.toFixed(2)),
+        total_utilidad: calculoIndividual.utilidadesPorAsociados,
+        total_comision: calculoIndividual.comisionAdministracion,
+        subtotal: calculoIndividual.aPagar,
+        descuento_4xmil: calculoIndividual.impuesto4xMilDesembolso,
+        total_deducciones: calculoIndividual.deducciones,
+        neto_entregar: calculoIndividual.totalAPagar,
+        fecha_liquidacion: new Date().toISOString().split('T')[0]
+      }
+      
+      await crearLiquidacion(liquidacionFinal as any)
+      
+      alert('Liquidación creada exitosamente')
+      setShowModalLiquidacionIndividual(false)
+      setAsociadoLiquidacionIndividual(null)
+      setCalculoIndividual(null)
+      await loadData()
+    } catch (error) {
+      console.error('Error finalizing liquidacion individual:', error)
+      alert('Error al finalizar la liquidación')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleEliminarLiquidacion = async (liquidacionId: number | string) => {
+    try {
+      // Obtener la liquidación para saber qué asociados están involucrados
+      const liquidacion = liquidaciones.find(liq => liq.id === liquidacionId)
+      if (!liquidacion) {
+        alert('Liquidación no encontrada')
+        return
+      }
+      
+      // Eliminar todas las liquidaciones del grupo (misma fecha_liquidacion)
       await eliminarLiquidacion(liquidacionId)
-      alert('Liquidación revertida exitosamente')
-      await loadHistorial()
+      
+      // Obtener todos los nombres del grupo (puede ser array o string)
+      const nombresAsociados = liquidacion.nombres_asociados as string[] | string | undefined
+      const nombresGrupo = nombresAsociados
+        ? (Array.isArray(nombresAsociados)
+            ? nombresAsociados
+            : (typeof nombresAsociados === 'string' 
+                ? nombresAsociados.split(',').map((n: string) => n.trim())
+                : []))
+        : []
+      
+      // Actualizar estado local inmediatamente para cambiar todas las caritas a amarillo
+      if (nombresGrupo.length > 0) {
+        setControlLiquidaciones(prev => prev.map(control => 
+          nombresGrupo.includes(control.nombre)
+            ? { ...control, estado: 'Pendiente' as const }
+            : control
+        ))
+      }
+      
+      // Actualizar lista de liquidaciones
+      const nuevasLiquidaciones = await obtenerLiquidaciones()
+      setLiquidaciones(nuevasLiquidaciones)
+      
+      const mensaje = nombresGrupo.length > 1
+        ? `Liquidación revertida exitosamente. ${nombresGrupo.length} asociados volvieron a estado pendiente.`
+        : 'Liquidación revertida exitosamente. El asociado volvió a estado pendiente.'
+      alert(mensaje)
+      setShowModalDetalle(false)
+      setIngresosDetalle(null)
     } catch (error) {
       console.error('Error deleting liquidacion:', error)
       alert('Error al revertir la liquidación')
+    }
+  }
+
+  const getEstadoCarita = (asociado: AsociadoControl): 'liquidado' | 'pendiente' | 'retirado' => {
+    if (!asociado.activo) return 'retirado'
+    if (asociado.estado === 'LIQUIDADO') return 'liquidado'
+    return 'pendiente'
+  }
+
+  const getLiquidacionAsociado = (asociado: AsociadoControl): Liquidacion | null => {
+    return liquidaciones.find(liq => 
+      liq.nombres_asociados?.includes(asociado.nombre)
+    ) || null
+  }
+
+  const getCaritaColor = (estado: 'liquidado' | 'pendiente' | 'retirado', estaRetirado: boolean) => {
+    if (estaRetirado) {
+      return 'bg-gray-400 cursor-not-allowed opacity-60'
+    }
+    
+    switch (estado) {
+      case 'liquidado':
+        return 'bg-green-500 hover:bg-green-600'
+      case 'pendiente':
+        return 'bg-yellow-500 hover:bg-yellow-600'
+      case 'retirado':
+        return 'bg-gray-400 cursor-not-allowed opacity-60'
+      default:
+        return 'bg-gray-300'
+    }
+  }
+
+  const getCaritaEmoji = (estado: 'liquidado' | 'pendiente' | 'retirado', estaRetirado: boolean) => {
+    if (estaRetirado) {
+      return '😶'
+    }
+    
+    switch (estado) {
+      case 'liquidado':
+        return '😊'
+      case 'pendiente':
+        return '😐'
+      case 'retirado':
+        return '😶'
+      default:
+        return '😐'
     }
   }
 
@@ -302,14 +405,32 @@ export default function LiquidacionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className={showHistory ? "max-w-[95vw] mx-auto" : "max-w-7xl mx-auto"}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Calculator className="w-8 h-8 text-white" />
             <h1 className="text-4xl font-bold text-white">Liquidación Anual</h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 justify-end">
+            {showHistory && (
+              <button
+                onClick={() => setShowHistory(false)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Volver</span>
+              </button>
+            )}
+            {!showHistory && (
+              <button
+                onClick={() => setShowHistory(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                <History className="w-4 h-4" />
+                <span>Historial de Liquidaciones</span>
+              </button>
+            )}
             <Link
               href="/dashboard"
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
@@ -317,95 +438,14 @@ export default function LiquidacionPage() {
               <Home className="w-4 h-4" />
               <span>Home</span>
             </Link>
-            <button
-              onClick={() => {
-                setView(view === 'nueva' ? 'historial' : 'nueva')
-                if (view === 'historial') {
-                  loadHistorial()
-                }
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
-            >
-              {view === 'nueva' ? 'Ver Historial' : 'Nueva Liquidación'}
-            </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setView('nueva')}
-            className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-              view === 'nueva'
-                ? 'bg-blue-700 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Nueva Liquidación
-          </button>
-          <button
-            onClick={() => {
-              setView('historial')
-              loadHistorial()
-            }}
-            className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-              view === 'historial'
-                ? 'bg-blue-700 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Historial de Asociados Liquidados
-          </button>
-        </div>
-
-        {/* Nueva Liquidación */}
-        {view === 'nueva' && (
-          <div className="space-y-6">
-            {/* Información y Botón de Calcular */}
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
-              <h2 className="text-2xl font-bold text-white mb-4">Cálculos de Liquidación</h2>
-              <p className="text-sm text-gray-400 mb-4">
-                El 4xMil Operativo se obtiene automáticamente desde los Gastos Bancarios registrados. 
-                Para agregar gastos, ve al Home y selecciona "Registrar Gasto Bancario (4xMil)".
-              </p>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  4xMil de Egreso (%)
-                </label>
-                <input
-                  type="number"
-                  value={impuesto4xMilEgreso}
-                  onChange={(e) => setImpuesto4xMilEgreso(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white max-w-xs"
-                  step="0.1"
-                />
-              </div>
-              
-              <button
-                onClick={calcularUtilidadBruta}
-                disabled={calculando}
-                className="px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-              >
-                {calculando ? 'Calculando...' : 'Calcular Utilidad Bruta Repartible'}
-              </button>
-              
-              {utilidadBrutaRepartible > 0 && (
-                <div className="mt-4 p-4 bg-green-900 bg-opacity-50 border border-green-700 rounded-lg">
-                  <p className="text-sm text-green-200">Utilidad Bruta Repartible:</p>
-                  <p className="text-2xl font-bold text-white">${utilidadBrutaRepartible.toLocaleString()}</p>
-                  <p className="text-xs text-green-300 mt-1">
-                    Utilidad x Cuota: ${utilidadPorCuota.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-green-300">
-                    Comisión Admin x Cuota ({porcentajeAdministracion}%): ${comisionAdminPorCuota.toLocaleString()}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Buscador */}
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
+        {/* Vista: Simulador de Liquidación */}
+        {!showHistory && (
+          <>
+            {/* Buscador de Asociados */}
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700 mb-6">
               <h2 className="text-2xl font-bold text-white mb-4">Buscar Asociado</h2>
               <div className="relative">
                 <input
@@ -423,7 +463,7 @@ export default function LiquidacionPage() {
                       <button
                         key={socio.id}
                         type="button"
-                        onClick={() => agregarAListaEspera(socio)}
+                        onClick={() => agregarAsociado(socio)}
                         className="w-full px-4 py-2 text-left hover:bg-gray-600 text-white"
                       >
                         <div className="font-medium">{socio.nombre}</div>
@@ -435,209 +475,695 @@ export default function LiquidacionPage() {
               </div>
             </div>
 
-            {/* Lista de Espera */}
-            {listaEspera.length > 0 && (
-              <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
+            {/* Asociados Seleccionados */}
+            {asociadosSeleccionados.length > 0 && (
+              <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700 mb-6">
                 <h2 className="text-2xl font-bold text-white mb-4">
-                  Lista de Espera ({listaEspera.length} asociado{listaEspera.length !== 1 ? 's' : ''})
+                  Asociados Seleccionados ({asociadosSeleccionados.length})
                 </h2>
-                <div className="space-y-2">
-                  {listaEspera.map((socio) => (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {asociadosSeleccionados.map((asociado) => (
                     <div
-                      key={socio.id}
-                      className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+                      key={asociado.id}
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-700 rounded-lg text-white"
                     >
-                      <div>
-                        <p className="font-medium text-white">{socio.nombre}</p>
-                        <p className="text-sm text-gray-400">
-                          Capital Pendiente: ${socio.capitalPendiente.toLocaleString()}
-                        </p>
-                      </div>
+                      <span>{asociado.nombre}</span>
                       <button
-                        onClick={() => removerDeListaEspera(socio.id)}
-                        className="text-red-400 hover:text-red-300"
+                        onClick={() => removerAsociado(asociado.id)}
+                        className="text-red-300 hover:text-red-200"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
-                
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={handleGenerarPreLiquidacion}
-                    className="px-6 py-3 bg-green-700 text-white rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Generar Pre-Liquidación
-                  </button>
-                </div>
               </div>
             )}
 
-            {/* Pre-Liquidación Modal */}
-            {showPreLiquidacion && (
-              <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-700">
-                  <h2 className="text-2xl font-bold mb-4 text-white">Pre-Liquidación</h2>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-700 rounded-lg">
-                        <p className="text-sm text-gray-400">Cuotas</p>
-                        <p className="text-xl font-bold text-white">{listaEspera.length}</p>
+            {/* Reporte de Liquidación (se muestra automáticamente al seleccionar) */}
+            {calculando && (
+              <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700 mb-6">
+                <p className="text-white text-center">Calculando liquidación...</p>
+              </div>
+            )}
+
+            {calculoLiquidacion && asociadosSeleccionados.length > 0 && !calculando && (
+              <div className="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700 mb-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Reporte de Liquidación</h2>
+                
+                {/* Ingresos Discriminados */}
+                <div className="mb-6">
+                  <h3 className="text-xl font-semibold text-white mb-3">Ingresos de la Natillera</h3>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                    {calculoLiquidacion.ingresosDiscriminados.natitombolaEnero > 0 && (
+                      <div className="flex justify-between text-white">
+                        <span>NATITOMBOLA ENERO</span>
+                        <span>${calculoLiquidacion.ingresosDiscriminados.natitombolaEnero.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
-                      <div className="p-4 bg-gray-700 rounded-lg">
-                        <p className="text-sm text-gray-400">Inscripciones</p>
-                        <p className="text-xl font-bold text-white">{listaEspera.length}</p>
+                    )}
+                    {calculoLiquidacion.ingresosDiscriminados.natitombolaFebrero > 0 && (
+                      <div className="flex justify-between text-white">
+                        <span>NATITOMBOLA FEBRERO</span>
+                        <span>${calculoLiquidacion.ingresosDiscriminados.natitombolaFebrero.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
+                    )}
+                    {calculoLiquidacion.ingresosDiscriminados.natitombolaMarzo > 0 && (
+                      <div className="flex justify-between text-white">
+                        <span>NATITOMBOLA MARZO</span>
+                        <span>${calculoLiquidacion.ingresosDiscriminados.natitombolaMarzo.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {calculoLiquidacion.ingresosDiscriminados.natitombolaJunio > 0 && (
+                      <div className="flex justify-between text-white">
+                        <span>NATITOMBOLA JUNIO</span>
+                        <span>${calculoLiquidacion.ingresosDiscriminados.natitombolaJunio.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-white font-semibold">
+                      <span>MORAS EN CUOTAS</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.morasEnCuotas.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-white font-semibold">
+                      <span>INTERESES POR NATICREDITOS</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.interesesPorNaticreditos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     
-                    <div className="p-4 bg-gray-700 rounded-lg">
-                      <p className="text-sm text-gray-400">Subtotal</p>
-                      <p className="text-2xl font-bold text-white">${subtotal.toLocaleString()}</p>
+                    {/* Inversiones individuales */}
+                    {calculoLiquidacion.ingresosDiscriminados.inversiones && calculoLiquidacion.ingresosDiscriminados.inversiones.length > 0 && (
+                      <>
+                        {calculoLiquidacion.ingresosDiscriminados.inversiones.map((inversion, index) => (
+                          <div key={index} className="flex justify-between text-white">
+                            <span>Utilidad Inversión: {inversion.nombre}</span>
+                            <span>${inversion.utilidad.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    
+                    {/* Total Inscripciones */}
+                    <div className="flex justify-between text-white font-semibold">
+                      <span>TOTAL INSCRIPCIONES</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.totalInscripciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     
-                    <div className="p-4 bg-gray-700 rounded-lg">
-                      <p className="text-sm text-gray-400">Descuento 4xMil Egreso</p>
-                      <p className="text-2xl font-bold text-red-400">${descuento4xMil.toLocaleString()}</p>
-                    </div>
+                    {/* Actividades individuales */}
+                    {calculoLiquidacion.ingresosDiscriminados.actividades && calculoLiquidacion.ingresosDiscriminados.actividades.length > 0 && (
+                      <>
+                        {calculoLiquidacion.ingresosDiscriminados.actividades.map((actividad, index) => (
+                          <div key={index} className="flex justify-between text-white">
+                            <span>{actividad.nombre}</span>
+                            <span>${actividad.valor.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                     
-                    <div className="p-4 bg-gray-700 rounded-lg">
-                      <p className="text-sm text-gray-400">Deducciones (Capital Pendiente)</p>
-                      <p className="text-2xl font-bold text-red-400">${totalDeducciones.toLocaleString()}</p>
+                    <div className="flex justify-between text-white font-bold text-lg border-t border-gray-600 pt-2 mt-2">
+                      <span>TOTAL CUOTAS DE ASOCIADOS</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.totalCuotasDeAsociados.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
-                    
-                    <div className="p-4 bg-blue-900 bg-opacity-50 border-2 border-blue-700 rounded-lg">
-                      <p className="text-sm text-blue-200">NETO A ENTREGAR</p>
-                      <p className="text-3xl font-bold text-white">${netoEntregar.toLocaleString()}</p>
+                    <div className="flex justify-between text-green-400 font-bold text-xl border-t border-gray-600 pt-2 mt-2">
+                      <span>TOTAL INGRESOS NATILLERA</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.totalIngresosNatillera.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
-                    
-                    <div className="flex gap-3 pt-4">
-                      <button
-                        onClick={handleFinalizarLiquidacion}
-                        disabled={submitting}
-                        className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
-                      >
-                        {submitting ? 'Finalizando...' : 'Finalizar Liquidación'}
-                      </button>
-                      <button
-                        onClick={() => setShowPreLiquidacion(false)}
-                        className="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
-                      >
-                        Volver
-                      </button>
+                    <div className="flex justify-between text-red-400 font-bold">
+                      <span>GASTOS</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.gastos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-red-400 font-bold">
+                      <span>IMPUESTOS GOBIERNO 4X1000 ANUAL</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.impuesto4xMilOperativo.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-white font-bold text-xl border-t border-gray-600 pt-2 mt-2">
+                      <span>TOTAL RECAUDADO</span>
+                      <span>${calculoLiquidacion.ingresosDiscriminados.totalRecaudado.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                 </div>
+
+                {/* Resumen por Asociado */}
+                <div className="mb-6">
+                  <h3 className="text-xl font-semibold text-white mb-3">Resumen por Asociado(s)</h3>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between text-white font-semibold">
+                      <span>CUOTAS POR ASOCIADO(S) A LIQUIDAR</span>
+                      <span>${calculoLiquidacion.cuotasPorAsociados.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-red-400 font-semibold">
+                      <span>IMPUESTO 4XMIL DESEMBOLSO CUOTA</span>
+                      <span>${calculoLiquidacion.impuesto4xMilDesembolso.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-white">
+                      <span>UTILIDADES POR ASOCIADO(S) A LIQUIDAR</span>
+                      <span>${calculoLiquidacion.utilidadesPorAsociados.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-red-400">
+                      <span>DEDUCCIONES</span>
+                      <span>${calculoLiquidacion.deducciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-white">
+                      <span>COMISION POR ADMINISTRACION {porcentajeAdministracion}%</span>
+                      <span>${calculoLiquidacion.comisionAdministracion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-white font-bold text-xl border-t-2 border-gray-600 pt-2 mt-2">
+                      <span>TOTAL</span>
+                      <span>${calculoLiquidacion.totalAPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleLiquidar}
+                  disabled={submitting || calculando}
+                  className="w-full px-6 py-3 bg-green-700 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? 'Liquidando...' : 'Liquidar'}
+                </button>
               </div>
             )}
+          </>
+        )}
+
+        {/* Vista: Historial de Liquidaciones (Grid de Caritas) */}
+        {showHistory && (
+          <div className="space-y-6">
+            {/* Leyenda */}
+            <div className="mb-4 p-4 bg-blue-100 dark:bg-blue-900 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+              <p className="font-semibold mb-2">Leyenda:</p>
+              <div className="flex flex-wrap gap-4">
+                <span className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">😊</span>
+                  <span>Liquidado</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center">😐</span>
+                  <span>Pendiente</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">😶</span>
+                  <span>Retirado</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Tablero de Asociados - 6 Columnas ocupando 100% del ancho */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 sm:p-4">
+              <div 
+                className="w-full overflow-x-auto liquidacion-scrollbar"
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#4B5563 #1F2937'
+                }}
+              >
+                <div className="grid gap-4 min-w-[1200px]" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+                  {dividirEnColumnas(asociadosOrdenados).map((columna, colIndex) => (
+                    <div key={colIndex}>
+                      {/* Encabezado de columna */}
+                      <div className="border-b-2 border-gray-300 dark:border-gray-600 pb-1 mb-1 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                        <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase">
+                          ASOCIADO
+                        </div>
+                        <div className="flex gap-1 items-center text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                          <div className="w-6 text-center shrink-0">ID</div>
+                          <div className="flex-1 text-center">NOMBRE</div>
+                          <div className="w-6 text-center shrink-0">LIQ</div>
+                        </div>
+                      </div>
+                      
+                      {/* Lista de asociados - máximo 41 filas */}
+                      <div className="space-y-0">
+                        {columna.map((asociado) => {
+                          const estado = getEstadoCarita(asociado)
+                          const estaRetirado = !asociado.activo
+                          
+                          return (
+                            <div
+                              key={asociado.id}
+                              className="border-b border-gray-200 dark:border-gray-700 py-0.5 text-[10px] flex gap-1 items-center"
+                            >
+                              <div className="w-6 text-center text-gray-600 dark:text-gray-400 font-semibold text-[9px] shrink-0">
+                                {asociado.cedula}
+                              </div>
+                              <div className={`flex-1 truncate ${estaRetirado ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                                {asociado.nombre}
+                              </div>
+                              <button
+                                disabled={estaRetirado}
+                                onClick={() => {
+                                  if (estaRetirado) return
+                                  handleCaritaClick(asociado)
+                                }}
+                                className={`w-5 h-5 rounded-full ${getCaritaColor(estado, estaRetirado)} text-white flex items-center justify-center transition-colors flex-shrink-0 ${
+                                  estaRetirado ? 'cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                                title={estaRetirado ? 'Asociado retirado' : `Liquidación - ${estado === 'liquidado' ? 'Liquidado' : 'Pendiente'}`}
+                              >
+                                <span className="text-[9px]">{getCaritaEmoji(estado, estaRetirado)}</span>
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Historial */}
-        {view === 'historial' && (
-          <div className="space-y-6">
-            <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-2xl font-bold text-white">Control de Liquidaciones</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto text-sm">
-                  <thead>
-                    <tr className="bg-gray-700 border-b border-gray-600">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">NOMBRE</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">ESTADO</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">ACCIONES</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {controlLiquidaciones.map((control) => (
-                      <tr key={control.id} className="hover:bg-gray-700">
-                        <td className="px-4 py-3 text-gray-300">{control.id}</td>
-                        <td className="px-4 py-3 text-gray-300">{control.nombre}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            control.estado === 'LIQUIDADO'
-                              ? 'bg-gray-600 text-gray-300'
-                              : 'bg-green-600 text-white'
-                          }`}>
-                            {control.estado}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex gap-2 justify-center">
-                            {control.estado === 'LIQUIDADO' && (
-                              <span className="text-xs text-gray-500">Ver liquidación en historial</span>
-                            )}
-                            {control.estado === 'Pendiente' && (
-                              <span className="text-xs text-gray-500">-</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {/* Modal de Liquidación Individual (Pendiente/Retirado) */}
+        {showModalLiquidacionIndividual && asociadoLiquidacionIndividual && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col print-content">
+              <h2 className="text-2xl font-bold mb-3 text-gray-800 dark:text-white flex-shrink-0 no-print">
+                Liquidación Individual
+              </h2>
+              
+              {calculandoIndividual ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 dark:text-gray-400">Calculando liquidación...</p>
+                </div>
+              ) : calculoIndividual ? (
+                <>
+                  <div className="flex-1 overflow-y-auto pr-2">
+                    <div className="space-y-3">
+                      {/* Título y Nombre del Socio */}
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2 print-title">
+                          Reporte de Liquidación
+                        </h2>
+                        <h3 className="text-base font-semibold text-gray-800 dark:text-white mb-1 print-nombres">
+                          {asociadoLiquidacionIndividual.nombre}
+                        </h3>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Cédula: {asociadoLiquidacionIndividual.cedula}
+                        </p>
+                      </div>
 
-            <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-2xl font-bold text-white">Historial de Liquidaciones</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto text-sm">
-                  <thead>
-                    <tr className="bg-gray-700 border-b border-gray-600">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">ASOCIADOS</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase">NETO ENTREGAR</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">FECHA</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">ACCIONES</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {liquidaciones.map((liq) => (
-                      <tr key={liq.id} className="hover:bg-gray-700">
-                        <td className="px-4 py-3 text-gray-300">{liq.id}</td>
-                        <td className="px-4 py-3 text-gray-300">
-                          {(liq.nombres_asociados || []).join(', ')}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-white">
-                          ${(liq.neto_entregar || 0).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-gray-300">
-                          {new Date(liq.fecha_liquidacion).toLocaleDateString('es-ES')}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex gap-2 justify-center">
-                            <Link
-                              href={`/liquidacion/${liq.id}`}
-                              className="text-blue-400 hover:text-blue-300"
-                              title="Ver Liquidación"
-                            >
-                              <Eye className="w-4 h-4 inline" />
-                            </Link>
-                            <button
-                              onClick={() => handleEliminarLiquidacion(liq.id!)}
-                              className="text-red-400 hover:text-red-300"
-                              title="Revertir Liquidación"
-                            >
-                              <Trash2 className="w-4 h-4 inline" />
-                            </button>
+                      {/* Ingresos de la Natillera */}
+                      <div className="bg-gray-800 dark:bg-gray-900 rounded-lg p-3 space-y-1.5 border border-gray-700">
+                        <h3 className="text-lg font-semibold text-white mb-2">Ingresos de la Natillera</h3>
+                        <div className="bg-gray-700 rounded-lg p-3 space-y-1.5">
+                          <div className="flex justify-between text-white font-semibold text-sm">
+                            <span>MORAS EN CUOTAS</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.morasEnCuotas.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div className="flex justify-between text-white font-semibold text-sm">
+                            <span>INTERESES POR NATICREDITOS</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.interesesPorNaticreditos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          
+                          {/* Inversiones individuales */}
+                          {calculoIndividual.ingresosDiscriminados.inversiones && calculoIndividual.ingresosDiscriminados.inversiones.length > 0 && (
+                            <>
+                              {calculoIndividual.ingresosDiscriminados.inversiones.map((inversion, index) => (
+                                <div key={index} className="flex justify-between text-white text-xs">
+                                  <span>Utilidad Inversión: {inversion.nombre}</span>
+                                  <span>${inversion.utilidad.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                          
+                          <div className="flex justify-between text-green-400 font-bold text-base border-t border-gray-600 pt-1.5 mt-1.5">
+                            <span>TOTAL INGRESOS NATILLERA</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.totalIngresosNatillera.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between text-red-400 font-bold text-sm">
+                            <span>GASTOS</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.gastos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between text-red-400 font-bold text-sm">
+                            <span>IMPUESTOS GOBIERNO 4X1000 ANUAL</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.impuesto4xMilOperativo.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between text-white font-bold text-base border-t border-gray-600 pt-1.5 mt-1.5">
+                            <span>TOTAL RECAUDADO</span>
+                            <span>${calculoIndividual.ingresosDiscriminados.totalRecaudado.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Separador */}
+                      <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
+
+                      {/* Resumen por Asociado */}
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-800 dark:text-white mb-2">Resumen por Asociado</h3>
+                      </div>
+
+                      {/* Desglose Financiero */}
+                      <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                          <span>Cuotas del Asociado:</span>
+                          <span className="font-semibold">${calculoIndividual.cuotasPorAsociados.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                          <span>Utilidades:</span>
+                          <span className="font-semibold">${calculoIndividual.utilidadesPorAsociados.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-red-400 dark:text-red-400 font-semibold text-sm">
+                          <span>Impuesto 4xMil Desembolso Cuota:</span>
+                          <span>${calculoIndividual.impuesto4xMilDesembolso.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-red-600 dark:text-red-400 text-sm">
+                          <span>Deducciones:</span>
+                          <span className="font-semibold">${calculoIndividual.deducciones.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                          <span>Comisión {porcentajeAdministracion}%:</span>
+                          <span className="font-semibold">${calculoIndividual.comisionAdministracion.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        
+                        <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-2 mt-2">
+                          <div className="flex justify-between text-gray-900 dark:text-white">
+                            <span className="font-bold text-base">TOTAL NETO A ENTREGAR:</span>
+                            <span className="font-bold text-lg text-green-600 dark:text-green-400">
+                              ${calculoIndividual.totalAPagar.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="flex gap-3 pt-3 flex-shrink-0 border-t border-gray-300 dark:border-gray-600 mt-3 no-print">
+                    <button
+                      onClick={() => window.print()}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Imprimir
+                    </button>
+                    <button
+                      onClick={handleConfirmarLiquidacionIndividual}
+                      disabled={submitting}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors no-print"
+                    >
+                      {submitting ? 'Liquidando...' : 'Confirmar Liquidación'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowModalLiquidacionIndividual(false)
+                        setAsociadoLiquidacionIndividual(null)
+                        setCalculoIndividual(null)
+                      }}
+                      className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors no-print"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 dark:text-gray-400">Error al calcular la liquidación</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Detalle (Liquidado) */}
+        {showModalDetalle && asociadoDetalle && (
+          <>
+            <style jsx global>{`
+              @media print {
+                * {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                body * {
+                  visibility: hidden;
+                }
+                .print-content, .print-content * {
+                  visibility: visible;
+                }
+                .print-content {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  width: 100%;
+                  background: #1f2937 !important;
+                  color: white !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .print-content .bg-gray-800,
+                .print-content .bg-gray-700,
+                .print-content .bg-gray-900 {
+                  background: #1f2937 !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .print-content .text-green-400,
+                .print-content .text-green-600 {
+                  color: #4ade80 !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .print-content .text-red-400,
+                .print-content .text-red-600 {
+                  color: #f87171 !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .print-content .print-title {
+                  font-size: 24px !important;
+                  font-weight: bold !important;
+                  margin-bottom: 8px !important;
+                  color: white !important;
+                }
+                .print-content .print-nombres {
+                  font-size: 18px !important;
+                  font-weight: 600 !important;
+                  margin-bottom: 16px !important;
+                  color: white !important;
+                }
+                @page {
+                  size: A4;
+                  margin: 1cm;
+                }
+              }
+            `}</style>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col print-content">
+                <div className="flex justify-between items-center mb-3 flex-shrink-0 no-print">
+                  <button
+                    onClick={() => {
+                      setShowModalDetalle(false)
+                      setIngresosDetalle(null)
+                    }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              
+              <div className="flex-1 overflow-y-auto pr-2">
+              {(() => {
+                const liquidacion = getLiquidacionAsociado(asociadoDetalle)
+                if (!liquidacion) {
+                  return (
+                    <div className="text-gray-800 dark:text-white">
+                      <p className="mb-4">Este asociado aún no ha sido liquidado.</p>
+                      {!asociadoDetalle.activo && (
+                        <p className="text-yellow-600 dark:text-yellow-400">
+                          Asociado retirado. Solo se le devuelven Cuotas + Inscripción menos el 4xMil de desembolso.
+                        </p>
+                      )}
+                    </div>
+                  )
+                }
+                
+                return (
+                  <div className="space-y-3">
+                    {/* Título y Nombres de Asociados */}
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2 print-title">
+                        Reporte de Liquidación
+                      </h2>
+                      <h3 className="text-base font-semibold text-gray-800 dark:text-white mb-1 print-nombres">
+                        {(() => {
+                          if (!liquidacion.nombres_asociados) return asociadoDetalle.nombre
+                          const nombresAsociados = liquidacion.nombres_asociados as string[] | string | undefined
+                          let nombres: string
+                          if (Array.isArray(nombresAsociados)) {
+                            nombres = nombresAsociados.join(', ')
+                          } else if (typeof nombresAsociados === 'string') {
+                            nombres = nombresAsociados.replace(/[\[\]"]/g, '')
+                          } else {
+                            return asociadoDetalle.nombre
+                          }
+                          // Limpiar formato JSON: quitar corchetes, comillas y espacios extra
+                          nombres = nombres.replace(/[\[\]"]/g, '').replace(/\s*,\s*/g, ', ').trim()
+                          const esGrupo = Array.isArray(liquidacion.nombres_asociados)
+                            ? liquidacion.nombres_asociados.length > 1
+                            : nombres.includes(',')
+                          return esGrupo ? `Asociados: ${nombres}` : asociadoDetalle.nombre
+                        })()}
+                      </h3>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Cédula: {asociadoDetalle.cedula}
+                      </p>
+                    </div>
+
+                    {/* Ingresos de la Natillera */}
+                    {ingresosDetalle && (
+                      <>
+                        <div className="bg-gray-800 dark:bg-gray-900 rounded-lg p-3 space-y-1.5 border border-gray-700">
+                          <h3 className="text-lg font-semibold text-white mb-2">Ingresos de la Natillera</h3>
+                          <div className="bg-gray-700 rounded-lg p-3 space-y-1.5">
+                            <div className="flex justify-between text-white font-semibold text-sm">
+                              <span>MORAS EN CUOTAS</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.morasEnCuotas.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-white font-semibold text-sm">
+                              <span>INTERESES POR NATICREDITOS</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.interesesPorNaticreditos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            
+                            {/* Inversiones individuales */}
+                            {ingresosDetalle.ingresosDiscriminados.inversiones && ingresosDetalle.ingresosDiscriminados.inversiones.length > 0 && (
+                              <>
+                                {ingresosDetalle.ingresosDiscriminados.inversiones.map((inversion, index) => (
+                                  <div key={index} className="flex justify-between text-white text-xs">
+                                    <span>Utilidad Inversión: {inversion.nombre}</span>
+                                    <span>${inversion.utilidad.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                            
+                            <div className="flex justify-between text-green-400 font-bold text-base border-t border-gray-600 pt-1.5 mt-1.5">
+                              <span>TOTAL INGRESOS NATILLERA</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.totalIngresosNatillera.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-red-400 font-bold text-sm">
+                              <span>GASTOS</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.gastos.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-red-400 font-bold text-sm">
+                              <span>IMPUESTOS GOBIERNO 4X1000 ANUAL</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.impuesto4xMilOperativo.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-white font-bold text-base border-t border-gray-600 pt-1.5 mt-1.5">
+                              <span>TOTAL RECAUDADO</span>
+                              <span>${ingresosDetalle.ingresosDiscriminados.totalRecaudado.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Separador */}
+                        <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
+
+                        {/* Resumen por Asociado */}
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-800 dark:text-white mb-2">Resumen por Asociado</h3>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Desglose Financiero (Solo Lectura) */}
+                    <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                        <span>Cuotas del Asociado:</span>
+                        <span className="font-semibold">${((liquidacion.total_cuotas || 0) * 30000).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                        <span>Utilidades:</span>
+                        <span className="font-semibold">${(liquidacion.total_utilidad || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-red-400 dark:text-red-400 font-semibold text-sm">
+                        <span>Impuesto 4xMil Desembolso Cuota:</span>
+                        <span>${(liquidacion.descuento_4xmil || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-red-600 dark:text-red-400 text-sm">
+                        <span>Deducciones:</span>
+                        <span className="font-semibold">${(liquidacion.total_deducciones || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-gray-900 dark:text-white text-sm">
+                        <span>Comisión {porcentajeAdministracion}%:</span>
+                        <span className="font-semibold">${(liquidacion.total_comision || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      
+                      <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-2 mt-2">
+                        <div className="flex justify-between text-gray-900 dark:text-white">
+                          <span className="font-bold text-base">TOTAL NETO A ENTREGAR:</span>
+                          <span className="font-bold text-lg text-green-600 dark:text-green-400">
+                            ${(((liquidacion as any).neto_entregar || liquidacion.neto_entregar_final) || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Botones de Acción */}
+                    {(() => {
+                      const liquidacion = getLiquidacionAsociado(asociadoDetalle)
+                      if (!liquidacion) return null
+                      
+                      return (
+                        <div className="flex gap-3 pt-3 flex-shrink-0 border-t border-gray-300 dark:border-gray-600 mt-3 no-print">
+                          <button
+                            onClick={() => {
+                              window.print()
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                          >
+                            <Printer className="w-4 h-4" />
+                            Imprimir Comprobante
+                          </button>
+                          <button
+                            onClick={() => {
+                              const nombresAsociados = liquidacion.nombres_asociados as string[] | string | undefined
+                              const nombres = nombresAsociados
+                                ? (Array.isArray(nombresAsociados)
+                                    ? nombresAsociados.join(', ')
+                                    : (typeof nombresAsociados === 'string'
+                                        ? nombresAsociados.replace(/[\[\]"]/g, '').replace(/\s*,\s*/g, ', ').trim()
+                                        : asociadoDetalle.nombre))
+                                : asociadoDetalle.nombre
+                              const esGrupo = nombresAsociados
+                                ? (Array.isArray(nombresAsociados)
+                                    ? nombresAsociados.length > 1
+                                    : nombres.includes(','))
+                                : false
+                              const mensaje = esGrupo
+                                ? `¿Estás seguro de eliminar esta liquidación? Se eliminarán las liquidaciones de: ${nombres}. Todos los asociados volverán a estado pendiente.`
+                                : '¿Estás seguro de eliminar esta liquidación? El asociado volverá a estado pendiente.'
+                              if (confirm(mensaje)) {
+                                handleEliminarLiquidacion(liquidacion.id!)
+                              }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Eliminar
+                          </button>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )
+              })()}
               </div>
             </div>
           </div>
+          </>
         )}
       </div>
     </div>
   )
 }
-

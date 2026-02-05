@@ -26,3 +26,22 @@ body {
   }
 }
 
+/* Estilos para scrollbar discreta en historial de liquidaciones */
+.liquidacion-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.liquidacion-scrollbar::-webkit-scrollbar-track {
+  background: #1F2937;
+  border-radius: 4px;
+}
+
+.liquidacion-scrollbar::-webkit-scrollbar-thumb {
+  background: #4B5563;
+  border-radius: 4px;
+}
+
+.liquidacion-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
