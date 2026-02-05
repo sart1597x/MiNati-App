@@ -1,9 +1,19 @@
 import { supabase } from './supabase'
-import { obtenerPrestamos } from './prestamos'
-import { obtenerMovimientosPrestamo } from './prestamos'
-import { getAllPagos } from './pagos'
+import { obtenerPrestamos, obtenerMovimientosPrestamo, redondear, getFechaLocalHoy } from './prestamos'
+import { getAllPagos, generarFechasVencimiento } from './pagos'
 import { obtenerTotalRecaudadoMoras, obtenerMorasActivas } from './moras'
 import { obtenerTotalUtilidadInversiones } from './inversiones'
+import { obtenerConfiguracionNacional } from './configuracion'
+
+// Helper para parsear fechas sin problemas de zona horaria (igual que en extracto)
+function dateFromInput(fecha: string): Date {
+  const [y, m, d] = fecha.split('-').map(Number)
+  return new Date(y, m - 1, d, 0, 0, 0, 0)
+}
+
+const VALOR_MORA_DIARIA = 3000
+const MAX_DIAS_MORA = 15
+const MAX_TOTAL_SANCION = 45000 // 15 días * $3,000
 
 export interface AsociadoLiquidacion {
   id: number | string
@@ -479,12 +489,85 @@ export async function obtenerIngresosNatillera(): Promise<IngresosNatillera> {
 
 // Obtener deducciones completas de un asociado (moras + actividades + préstamos)
 export async function obtenerDeduccionesAsociado(cedula: string): Promise<number> {
-  // 1. Obtener moras pendientes del asociado
+  // 1. Obtener moras pendientes del asociado (recalculando en tiempo real para coincidir con control de moras)
   let totalMoras = 0
   try {
-    const moras = await obtenerMorasActivas()
-    const morasAsociado = moras.filter(m => m.cedula === cedula)
-    totalMoras = morasAsociado.reduce((sum, m) => sum + (m.resta || 0), 0)
+    // Obtener asociado por cédula
+    const { data: asociado } = await supabase
+      .from('asociados')
+      .select('id')
+      .eq('cedula', cedula)
+      .maybeSingle()
+    
+    if (asociado) {
+      const asociadoId = typeof asociado.id === 'string' ? parseInt(asociado.id) : asociado.id
+      
+      // Obtener todas las moras del asociado con resta > 0
+      const { data: morasData } = await supabase
+        .from('moras')
+        .select('*')
+        .eq('asociado_id', asociadoId)
+        .gt('resta', 0)
+      
+      if (morasData && morasData.length > 0) {
+        const hoy = new Date()
+        hoy.setHours(0, 0, 0, 0)
+        const config = await obtenerConfiguracionNacional()
+        const valorDiaMora = config?.valor_dia_mora ?? VALOR_MORA_DIARIA
+        
+        // Recalcular cada mora en tiempo real (igual que actualizarMorasExistentes)
+        for (const mora of morasData) {
+          // Obtener estado real de la cuota
+          const { data: cuota } = await supabase
+            .from('cuotas_pagos')
+            .select('fecha_vencimiento, pagado, fecha_pago')
+            .eq('cedula', cedula)
+            .eq('numero_cuota', mora.cuota)
+            .maybeSingle()
+          
+          // Fecha de vencimiento
+          let fechaVenc: Date
+          if (cuota?.fecha_vencimiento) {
+            const [vy, vm, vd] = cuota.fecha_vencimiento.split('-').map(Number)
+            fechaVenc = new Date(vy, vm - 1, vd, 0, 0, 0, 0)
+          } else {
+            const fechas = generarFechasVencimiento()
+            const base = fechas[mora.cuota - 1]
+            if (!base) continue
+            fechaVenc = new Date(
+              base.getFullYear(),
+              base.getMonth(),
+              base.getDate(),
+              0, 0, 0, 0
+            )
+          }
+          
+          // Fecha final (congelamiento si la cuota está pagada)
+          let fechaFinal = hoy
+          if (cuota?.pagado === true && cuota.fecha_pago) {
+            const [py, pm, pd] = cuota.fecha_pago.split('-').map(Number)
+            fechaFinal = new Date(py, pm - 1, pd, 0, 0, 0, 0)
+          }
+          
+          // Cálculo de días (igual que en actualizarMorasExistentes)
+          const diffMs = fechaFinal.getTime() - fechaVenc.getTime()
+          const diasTranscurridos = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+          
+          if (diasTranscurridos < 1) continue
+          
+          const diasMora = Math.min(MAX_DIAS_MORA, diasTranscurridos)
+          const totalSancion = Math.min(
+            MAX_TOTAL_SANCION,
+            diasMora * (mora.valor_mora || valorDiaMora)
+          )
+          
+          const resta = totalSancion - (mora.valor_pagado || 0)
+          
+          // Sumar la resta recalculada (coincide exactamente con control de moras)
+          totalMoras += Math.max(0, resta)
+        }
+      }
+    }
   } catch (e) {
     console.warn('Error obteniendo moras:', e)
   }
@@ -538,7 +621,8 @@ export async function obtenerDeduccionesAsociado(cedula: string): Promise<number
     console.warn('Error obteniendo actividades pendientes:', e)
   }
   
-  // 3. Obtener préstamos pendientes (capital + intereses a la fecha)
+  // 3. Obtener préstamos pendientes (Saldo a la Fecha = Capital + Intereses Causados hasta hoy)
+  // IMPORTANTE: Usar exactamente la misma lógica que el extracto para que coincida día a día
   let totalPrestamos = 0
   try {
     const { data: asociado } = await supabase
@@ -549,33 +633,69 @@ export async function obtenerDeduccionesAsociado(cedula: string): Promise<number
     
     if (asociado) {
       const asociadoId = typeof asociado.id === 'string' ? parseInt(asociado.id) : asociado.id
-      const capitalPendiente = await obtenerCapitalPendienteAsociado(asociadoId)
       
-      // Obtener intereses pendientes del asociado
+      // Obtener préstamos activos del asociado
       const prestamos = await obtenerPrestamos()
       const prestamosAsociado = prestamos.filter(p => {
         const pAsociadoId = typeof p.asociado_id === 'string' ? parseInt(p.asociado_id) : p.asociado_id
         return pAsociadoId === asociadoId && p.estado === 'activo'
       })
       
-      let interesesPendientes = 0
+      // Calcular saldo a la fecha para cada préstamo (igual que en el extracto)
       for (const prestamo of prestamosAsociado) {
         if (prestamo.id) {
           const movimientos = await obtenerMovimientosPrestamo(prestamo.id)
-          if (movimientos.length > 0) {
-            const ultimoMov = movimientos[movimientos.length - 1]
-            interesesPendientes += ultimoMov.interes_pendiente || 0
+          
+          // Si no hay movimientos, el saldo es el monto inicial
+          if (movimientos.length === 0) {
+            totalPrestamos += redondear(prestamo.monto || 0)
+            continue
           }
+          
+          // Obtener el último movimiento real (no proyecciones "sin_pago")
+          // Buscar desde el final hacia atrás para encontrar el último movimiento con ID
+          let ultimoMovimientoReal = null
+          for (let i = movimientos.length - 1; i >= 0; i--) {
+            const mov = movimientos[i]
+            if (mov.tipo_movimiento !== 'sin_pago' && mov.id !== undefined) {
+              ultimoMovimientoReal = mov
+              break
+            }
+          }
+          
+          // Si no hay movimiento real, usar el monto inicial
+          if (!ultimoMovimientoReal) {
+            totalPrestamos += redondear(prestamo.monto || 0)
+            continue
+          }
+          
+          const capitalPendienteActual = ultimoMovimientoReal.capital_pendiente || prestamo.monto
+          const interesPendienteAnterior = ultimoMovimientoReal.interes_pendiente || 0
+          
+          // Calcular días desde el último movimiento hasta hoy (EXACTAMENTE como en extracto)
+          const fechaUltimoMovimiento = dateFromInput(ultimoMovimientoReal.fecha)
+          const fechaHoy = new Date()
+          fechaHoy.setHours(0, 0, 0, 0) // Normalizar a medianoche para cálculo preciso
+          const diasDesdeUltimoMovimiento = Math.max(0, Math.floor((fechaHoy.getTime() - fechaUltimoMovimiento.getTime()) / (1000 * 60 * 60 * 24)))
+          
+          // FÓRMULA ÚNICA: Interés_Causado = (Capital × Tasa/30 × Días) + Interés_Pendiente_Anterior
+          const tasaInteres = (prestamo as any).tasa_interes || (prestamo as any).tasa || 0
+          const interesDiario = (capitalPendienteActual * tasaInteres) / 100 / 30
+          const interesCausadoPorDias = interesDiario * diasDesdeUltimoMovimiento
+          const interesCausadoHastaHoy = redondear(interesCausadoPorDias + interesPendienteAnterior)
+          
+          // Saldo a la fecha = Capital pendiente + Intereses causados no pagados
+          const saldoALaFecha = redondear(capitalPendienteActual + interesCausadoHastaHoy)
+          totalPrestamos += saldoALaFecha
         }
       }
-      
-      totalPrestamos = capitalPendiente + interesesPendientes
     }
   } catch (e) {
     console.warn('Error obteniendo préstamos pendientes:', e)
   }
   
-  return totalMoras + totalActividades + totalPrestamos
+  // Prioridad de Suma: Saldo Crédito Total + Moras Pendientes + Actividades Pendientes
+  return totalPrestamos + totalMoras + totalActividades
 }
 
 // Obtener cuotas pagadas por asociado
