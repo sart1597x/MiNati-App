@@ -178,6 +178,7 @@ export async function getAllPagos(): Promise<PagoCuota[]> {
     const { data, error } = await supabase
       .from('cuotas_pagos')
       .select('*')
+      .range(0, 9999)
 
     if (error) {
       // Si la tabla no existe, retornar array vacío
@@ -621,6 +622,7 @@ export async function obtenerTotalRecaudoCuotas(): Promise<{
     .from('cuotas_pagos')
     .select('id')
     .eq('pagado', true)
+    .range(0, 9999)
 
   if (error) {
     console.error('Error obteniendo cuotas pagadas:', error)
