@@ -118,31 +118,16 @@ export function calcularEstadoCuota(
   }
 
   // REGLA: La mora existe si fechaPago > fechaVencimiento
-  // Verificar que sean del mismo mes y año (cada cuota es independiente)
-  const mismoMesYAno = (
-    fechaPagoNorm.getMonth() === fechaVenc.getMonth() &&
-    fechaPagoNorm.getFullYear() === fechaVenc.getFullYear()
-  )
-  
-  if (!mismoMesYAno) {
-    // Si son de meses diferentes, no hay mora (cada cuota es independiente)
-    return {
-      estado: pago?.pagado ? 'pagado' : 'pendiente',
-      diasMora: 0,
-      montoMora: 0
-    }
-  }
-  
+  // REGLA: La mora se acumula por cada día de retraso sin importar el mes o año del pago
   // REGLA: Calcular días de mora usando floor((fechaPago - fechaVencimiento) / día)
   const diffMs = fechaPagoNorm.getTime() - fechaVenc.getTime()
   const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
   
-  // Aplicar fórmula: min(maxDias, max(1, diffDias)) - Mínimo 1 día si hay mora
-  const diasMora = Math.min(maxDias, Math.max(1, diffDias))
-  const montoMora = diasMora > 0 ? Math.min(maxMonto, diasMora * valorMora) : 0
-
-  // Si hay mora (fechaPago > fechaVencimiento), el estado es 'mora'
-  if (diasMora > 0) {
+  // Si hay días de retraso, aplicar tope máximo de 15 días
+  if (diffDias > 0) {
+    const diasMora = Math.min(diffDias, maxDias)
+    const montoMora = diasMora * valorMora
+    
     return {
       estado: 'mora',
       diasMora,

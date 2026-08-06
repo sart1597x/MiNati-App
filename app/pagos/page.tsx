@@ -198,20 +198,7 @@ export default function PagosPage() {
     // (el mismo día del vencimiento NO genera mora, pero tampoco es "pagado" si hay mora pendiente)
 
     // REGLA: La mora existe si fechaPago > fechaVencimiento
-    // Verificar que sean del mismo mes y año (cada cuota es independiente)
-    const mismoMesYAno = (
-      fechaPagoNorm.getMonth() === fechaVencNorm.getMonth() &&
-      fechaPagoNorm.getFullYear() === fechaVencNorm.getFullYear()
-    )
-    
-    if (!mismoMesYAno) {
-      // Si son de meses diferentes, no hay mora (cada cuota es independiente)
-      return {
-        estado: pago?.pagado ? 'pagado' as const : 'pendiente' as const,
-        montoMora: 0
-      }
-    }
-
+    // REGLA: La mora se acumula por cada día de retraso sin importar el mes o año del pago
     // REGLA: Calcular días de mora usando floor((fechaPago - fechaVencimiento) / día)
 const diffMs = fechaPagoNorm.getTime() - fechaVencNorm.getTime()
 const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
@@ -234,11 +221,10 @@ if (diffDias <= 0) {
 // Usar valores desde configuración (solo para visualización en UI)
 const valorDiaMora = configuracion?.valor_dia_mora ?? VALOR_MORA_DIARIA_DEFAULT
 const maxDiasMora = 15
-const maxMontoMora = maxDiasMora * valorDiaMora
 
-// Solo aquí hay mora real
-const diasMora = Math.min(maxDiasMora, diffDias)
-const montoMora = Math.min(maxMontoMora, diasMora * valorDiaMora)
+// Si hay días de retraso, aplicar tope máximo de 15 días
+const diasMora = Math.min(diffDias, maxDiasMora)
+const montoMora = diasMora * valorDiaMora
 
 return {
   estado: 'mora' as const,
