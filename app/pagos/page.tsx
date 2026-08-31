@@ -28,6 +28,12 @@ export default function PagosPage() {
   const [montoMoraCalculado, setMontoMoraCalculado] = useState(0)
   const [morasDB, setMorasDB] = useState<any[]>([]) // Para almacenar moras de la BD
   const [configuracion, setConfiguracion] = useState<{ valor_cuota: number; valor_dia_mora: number } | null>(null)
+  const [showMultiPaymentModal, setShowMultiPaymentModal] = useState(false)
+  const [multiPaymentSearch, setMultiPaymentSearch] = useState('')
+  const [selectedAssociates, setSelectedAssociates] = useState<Socio[]>([])
+  const [selectedCuotasPerAssociate, setSelectedCuotasPerAssociate] = useState<{ [cedula: string]: number[] }>({})
+  const [multiPaymentDate, setMultiPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [multiPaymentSubmitting, setMultiPaymentSubmitting] = useState(false)
 
   const fechasVencimiento = generarFechasVencimiento()
   
@@ -343,6 +349,121 @@ return {
     }
   }
 
+  const handleAddAssociate = (socio: Socio) => {
+    if (!selectedAssociates.find(s => s.cedula === socio.cedula)) {
+      setSelectedAssociates([...selectedAssociates, socio])
+      // Automatically select only unpaid cuotas of the month
+      const cuotasDelMes = obtenerCuotasDelMes(mesSeleccionado)
+      const unpaidCuotas = cuotasDelMes.filter(numeroCuota => {
+        const pago = getPagoSocio(socio.cedula, numeroCuota)
+        return !pago?.pagado
+      })
+      setSelectedCuotasPerAssociate(prev => ({
+        ...prev,
+        [socio.cedula]: unpaidCuotas
+      }))
+    }
+    setMultiPaymentSearch('')
+  }
+
+  const handleRemoveAssociate = (cedula: string) => {
+    setSelectedAssociates(selectedAssociates.filter(s => s.cedula !== cedula))
+    setSelectedCuotasPerAssociate(prev => {
+      const newState = { ...prev }
+      delete newState[cedula]
+      return newState
+    })
+  }
+
+  const handleToggleCuota = (cedula: string, numeroCuota: number) => {
+    setSelectedCuotasPerAssociate(prev => {
+      const currentCuotas = prev[cedula] || []
+      if (currentCuotas.includes(numeroCuota)) {
+        // Remove cuota
+        return {
+          ...prev,
+          [cedula]: currentCuotas.filter(c => c !== numeroCuota)
+        }
+      } else {
+        // Add cuota
+        return {
+          ...prev,
+          [cedula]: [...currentCuotas, numeroCuota]
+        }
+      }
+    })
+  }
+
+  const handleMultiPayment = async () => {
+    if (selectedAssociates.length === 0) {
+      alert('Por favor seleccione al menos un asociado')
+      return
+    }
+
+    // Check if at least one cuota is selected
+    const totalSelectedCuotas = Object.values(selectedCuotasPerAssociate).reduce((sum, cuotas) => sum + cuotas.length, 0)
+    if (totalSelectedCuotas === 0) {
+      alert('Por favor seleccione al menos una cuota para pagar')
+      return
+    }
+
+    try {
+      setMultiPaymentSubmitting(true)
+      const fechaPagoDate = dateFromInput(multiPaymentDate)
+      let successCount = 0
+      let errorCount = 0
+
+      for (const socio of selectedAssociates) {
+        const cuotasToPay = selectedCuotasPerAssociate[socio.cedula] || []
+        
+        for (const numeroCuota of cuotasToPay) {
+          try {
+            const cuotaSeleccionada = pagos.find(
+              p => p.cedula === socio.cedula && p.numero_cuota === numeroCuota
+            )
+
+            if (!cuotaSeleccionada?.pagado) {
+              const fechaVencimiento = fechasVencimiento[numeroCuota - 1]
+              await registrarPago(
+                socio.cedula,
+                numeroCuota,
+                fechaVencimiento,
+                fechaPagoDate,
+                multiPaymentDate
+              )
+              successCount++
+            }
+          } catch (error) {
+            console.error(`Error registrando pago para ${socio.nombre} cuota ${numeroCuota}:`, error)
+            errorCount++
+          }
+        }
+      }
+
+      await loadData()
+      setShowMultiPaymentModal(false)
+      setSelectedAssociates([])
+      setSelectedCuotasPerAssociate({})
+      setMultiPaymentSearch('')
+      
+      alert(`Pagos registrados: ${successCount} exitosos, ${errorCount} con errores`)
+    } catch (error: any) {
+      console.error('Error in multi-payment:', error)
+      alert('Error: ' + (error?.message || 'Error desconocido'))
+    } finally {
+      setMultiPaymentSubmitting(false)
+    }
+  }
+
+  const filteredSocios = socios.filter(socio => {
+    const searchLower = multiPaymentSearch.toLowerCase()
+    const matchesSearch = socio.nombre.toLowerCase().includes(searchLower) || 
+                         socio.cedula.includes(searchLower)
+    const notSelected = !selectedAssociates.find(sa => sa.cedula === socio.cedula)
+    const isActive = socio.activo !== false
+    return matchesSearch && notSelected && isActive
+  })
+
   const getCaritaColor = (
     estado: 'pagado' | 'pendiente' | 'mora',
     estaRetirado: boolean
@@ -483,6 +604,13 @@ return {
               <span className="hidden sm:inline">Ver Moras</span>
               <span className="sm:hidden">Moras</span>
             </Link>
+            <button
+              onClick={() => setShowMultiPaymentModal(true)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shrink-0 whitespace-nowrap"
+            >
+              <span className="hidden sm:inline">Pagar Varias Cuotas</span>
+              <span className="sm:hidden">Múltiples</span>
+            </button>
           </div>
         </div>
 
@@ -697,6 +825,173 @@ return {
             </div>
           )
         })()}
+
+        {/* Modal para Pagar Varias Cuotas */}
+        {showMultiPaymentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
+                Pagar Varias Cuotas - {nombresMeses[mesSeleccionado]}
+              </h2>
+
+              <div className="space-y-4">
+                {/* Buscador de asociados */}
+                <div>
+                  <label htmlFor="associateSearch" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Buscar Asociado (nombre o cédula)
+                  </label>
+                  <input
+                    type="text"
+                    id="associateSearch"
+                    value={multiPaymentSearch}
+                    onChange={(e) => setMultiPaymentSearch(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="Escribe el nombre o cédula del asociado..."
+                  />
+                </div>
+
+                {/* Lista de resultados de búsqueda */}
+                {multiPaymentSearch && filteredSocios.length > 0 && (
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg max-h-48 overflow-y-auto">
+                    {filteredSocios.slice(0, 10).map((socio) => (
+                      <div
+                        key={socio.cedula}
+                        onClick={() => handleAddAssociate(socio)}
+                        className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-200 dark:border-gray-600 last:border-b-0"
+                      >
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {socio.nombre}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Cédula: {socio.cedula}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Lista de asociados seleccionados */}
+                {selectedAssociates.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+                      Asociados Seleccionados ({selectedAssociates.length})
+                    </h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {selectedAssociates.map((socio) => {
+                        const cuotasDelMes = obtenerCuotasDelMes(mesSeleccionado)
+                        const fechaPagoDate = dateFromInput(multiPaymentDate)
+                        
+                        return (
+                          <div key={socio.cedula} className="border border-gray-300 dark:border-gray-600 rounded-lg p-3">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-semibold text-gray-900 dark:text-white">
+                                  {socio.nombre}
+                                </p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  Cédula: {socio.cedula}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveAssociate(socio.cedula)}
+                                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            {/* Caritas del mes */}
+                            <div className="flex gap-2 mt-2">
+                              {cuotasDelMes.map((numeroCuota) => {
+                                const pago = getPagoSocio(socio.cedula, numeroCuota)
+                                // Skip already paid cuotas
+                                if (pago?.pagado) return null
+                                
+                                const estadoCuota = getEstadoCuota(socio.cedula, numeroCuota, fechaPagoDate)
+                                const isSelected = (selectedCuotasPerAssociate[socio.cedula] || []).includes(numeroCuota)
+                                
+                                return (
+                                  <div key={numeroCuota} className="text-center relative">
+                                    <button
+                                      onClick={() => handleToggleCuota(socio.cedula, numeroCuota)}
+                                      className={`absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs flex items-center justify-center transition-colors ${!isSelected ? 'opacity-0 pointer-events-none' : ''}`}
+                                      title="Quitar cuota del pago"
+                                    >
+                                      ✕
+                                    </button>
+                                    <button
+                                      className={`w-8 h-8 rounded-full ${isSelected ? getCaritaColor(estadoCuota.estado, false) : 'bg-gray-300 opacity-50'} text-white flex items-center justify-center transition-colors`}
+                                      title={`Cuota ${numeroCuota} - ${estadoCuota.estado}`}
+                                    >
+                                      <span className="text-xs">{getCaritaEmoji(estadoCuota.estado, false)}</span>
+                                    </button>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">C{numeroCuota}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Fecha de pago */}
+                <div>
+                  <label htmlFor="multiPaymentDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Fecha de Pago *
+                  </label>
+                  <input
+                    type="date"
+                    id="multiPaymentDate"
+                    value={multiPaymentDate}
+                    onChange={(e) => setMultiPaymentDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    required
+                  />
+                </div>
+
+                {/* Resumen */}
+                {selectedAssociates.length > 0 && (
+                  <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Se pagarán las cuotas del mes de <strong>{nombresMeses[mesSeleccionado]}</strong> para <strong>{selectedAssociates.length}</strong> asociado(s)
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Total de cuotas seleccionadas: <strong>{Object.values(selectedCuotasPerAssociate).reduce((sum, cuotas) => sum + cuotas.length, 0)}</strong>
+                    </p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">
+                      Total a pagar: <strong>${(Object.values(selectedCuotasPerAssociate).reduce((sum, cuotas) => sum + cuotas.length, 0) * (configuracion?.valor_cuota ?? VALOR_CUOTA_DEFAULT)).toLocaleString()}</strong>
+                    </p>
+                  </div>
+                )}
+
+                {/* Botones */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleMultiPayment}
+                    disabled={multiPaymentSubmitting || Object.values(selectedCuotasPerAssociate).reduce((sum, cuotas) => sum + cuotas.length, 0) === 0}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {multiPaymentSubmitting ? 'Procesando...' : 'Registrar Pagos'}
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowMultiPaymentModal(false)
+                      setSelectedAssociates([])
+                      setSelectedCuotasPerAssociate({})
+                      setMultiPaymentSearch('')
+                    }}
+                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <style jsx global>{`
         @media print {
