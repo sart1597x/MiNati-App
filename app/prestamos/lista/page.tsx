@@ -38,14 +38,15 @@ export default function ListaPrestamosPage() {
   const loadSaldos = async () => {
     try {
       setLoadingSaldos(true)
-      const saldosData: Record<string, number> = {}
+      const saldosData: Record<string, number | null> = {}
       for (const prestamo of prestamos) {
         if (prestamo.id) {
           try {
             const saldo = await calcularSaldoActual(prestamo.id)
             saldosData[prestamo.id] = saldo
           } catch (error) {
-            saldosData[prestamo.id] = prestamo.monto
+            console.error(`Error calculando saldo para préstamo #${prestamo.id}:`, error)
+            saldosData[prestamo.id] = null
           }
         }
       }
@@ -163,8 +164,10 @@ export default function ListaPrestamosPage() {
                       <td className="px-4 py-4 text-sm font-semibold text-gray-900 dark:text-white">
                         {loadingSaldos ? (
                           <span className="text-gray-400">Calculando...</span>
+                        ) : saldos[prestamo.id || ''] === null ? (
+                          <span className="text-red-500">Error</span>
                         ) : (
-                          `$${(saldos[prestamo.id || ''] || prestamo.monto).toLocaleString()}`
+                          `$${(saldos[prestamo.id || ''] ?? 0).toLocaleString()}`
                         )}
                       </td>
                       <td className="px-4 py-4 text-sm">

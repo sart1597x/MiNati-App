@@ -394,7 +394,7 @@ export default function PagoPrestamoPage() {
 
       console.error('Error registering pago:', error)
 
-      alert('Error al registrar el pago')
+      alert(error instanceof Error ? error.message : 'Error al registrar el pago')
 
     } finally {
 

@@ -5,8 +5,8 @@ export interface MovimientoCaja {
   tipo: string  // 'INGRESO' o 'EGRESO'
   concepto: string
   monto: number
-  saldo_anterior: number
-  nuevo_saldo: number
+  saldo_anterior?: number  // Opcional: RPC lo calcula automáticamente
+  nuevo_saldo?: number  // Opcional: RPC lo calcula automáticamente
   fecha: string  // Formato YYYY-MM-DD
   referencia_id?: string  // UUID de referencia (inscripción, etc.) - opcional
   created_at?: string
@@ -531,3 +531,70 @@ export async function obtenerGastosCaja(): Promise<MovimientoCaja[]> {
   }
 }
 
+// Crear movimiento de caja de forma atómica usando RPC (FASE 2)
+// Esta función previene race conditions en movimientos simultáneos usando advisory lock
+export async function crearMovimientoCajaTransaccional(
+  movimiento: Omit<MovimientoCaja, 'id' | 'created_at'>
+): Promise<MovimientoCaja> {
+  // Formatear fecha
+  let fechaFormateada = movimiento.fecha
+  if (!fechaFormateada) {
+    const hoy = new Date()
+    const year = hoy.getFullYear()
+    const month = String(hoy.getMonth() + 1).padStart(2, '0')
+    const day = String(hoy.getDate()).padStart(2, '0')
+    fechaFormateada = `${year}-${month}-${day}`
+  } else if (fechaFormateada.includes('T')) {
+    fechaFormateada = fechaFormateada.split('T')[0]
+  }
+  
+  // Validar formato de fecha
+  const fechaRegex = /^\d{4}-\d{2}-\d{2}$/
+  if (!fechaRegex.test(fechaFormateada)) {
+    const fecha = new Date(fechaFormateada)
+    if (!isNaN(fecha.getTime())) {
+      const year = fecha.getFullYear()
+      const month = String(fecha.getMonth() + 1).padStart(2, '0')
+      const day = String(fecha.getDate()).padStart(2, '0')
+      fechaFormateada = `${year}-${month}-${day}`
+    } else {
+      const hoy = new Date()
+      const year = hoy.getFullYear()
+      const month = String(hoy.getMonth() + 1).padStart(2, '0')
+      const day = String(hoy.getDate()).padStart(2, '0')
+      fechaFormateada = `${year}-${month}-${day}`
+    }
+  }
+  
+  // Llamar a la función RPC
+  const { data, error } = await supabase.rpc('crear_movimiento_caja_atomico', {
+    p_tipo: movimiento.tipo,
+    p_concepto: movimiento.concepto,
+    p_monto: movimiento.monto,
+    p_fecha: fechaFormateada,
+    p_referencia_id: movimiento.referencia_id || null
+  })
+  
+  if (error) {
+    console.error('Error en RPC crear_movimiento_caja_atomico:', error)
+    throw new Error(`Error creando movimiento atómico: ${error.message}`)
+  }
+  
+  // Parsear resultado JSON
+  const resultado = data as any
+  if (!resultado.success) {
+    throw new Error(`Error en RPC: ${resultado.error}`)
+  }
+  
+  // Retornar el movimiento creado
+  return {
+    id: resultado.movimiento_id,
+    tipo: movimiento.tipo,
+    concepto: movimiento.concepto,
+    monto: movimiento.monto,
+    saldo_anterior: resultado.saldo_anterior,
+    nuevo_saldo: resultado.nuevo_saldo,
+    fecha: fechaFormateada,
+    referencia_id: movimiento.referencia_id
+  }
+}

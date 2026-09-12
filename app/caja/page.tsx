@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Home, ArrowLeft, Wallet, X, Plus, Database, FileText } from 'lucide-react'
 import { getAllPagos, obtenerTotalRecaudoCuotas } from '@/lib/pagos'
 import { obtenerTotalRecaudadoMoras } from '@/lib/moras'
-import { obtenerPrestamos, obtenerMovimientosPrestamo, obtenerTotalRecaudadoIntereses, obtenerTotalCapitalPrestado, obtenerTotalAbonosCapital } from '@/lib/prestamos'
+import { obtenerPrestamos, obtenerMovimientosPrestamo, obtenerTotalRecaudadoIntereses, obtenerTotalCapitalPrestado } from '@/lib/prestamos'
 import { supabase } from '@/lib/supabase'
 import { obtenerMovimientosCaja, obtenerSaldoTotal, crearMovimientoCaja, obtenerUltimoSaldo, MovimientoCaja, calcularEstadosCaja } from '@/lib/caja'
 import { obtenerConfiguracionNacional } from '@/lib/configuracion'
@@ -16,7 +16,6 @@ import { obtenerTotalInversiones, obtenerTotalUtilidadInversiones } from '@/lib/
 interface IndicadoresCaja {
   recaudoTotal: number
   capitalPrestado: number
-  abonosCapital: number
   gastos: number
   disponible: number
 }
@@ -31,7 +30,6 @@ export default function CajaPage() {
   const [indicadores, setIndicadores] = useState<IndicadoresCaja>({
     recaudoTotal: 0,
     capitalPrestado: 0,
-    abonosCapital: 0,
     gastos: 0,
     disponible: 0
   })
@@ -93,7 +91,6 @@ export default function CajaPage() {
       setIndicadores({
         recaudoTotal: 0,
         capitalPrestado: 0,
-        abonosCapital: 0,
         gastos: 0,
         disponible: 0
       })
@@ -110,7 +107,6 @@ export default function CajaPage() {
       setIndicadores({
         recaudoTotal: 0,
         capitalPrestado: 0,
-        abonosCapital: 0,
         gastos: 0,
         disponible: 0
       })
@@ -177,8 +173,7 @@ export default function CajaPage() {
           resumenInscripcionesTemp,
           totalUtilidadInversionesResult,
           totalInteresesPrestamosResult,
-          totalCapitalPrestadoResult,
-          totalAbonosCapitalResult
+          totalCapitalPrestadoResult
         ] = await Promise.all([
           obtenerTotalRecaudoCuotas(),
           obtenerTotalInversiones(),
@@ -187,8 +182,7 @@ export default function CajaPage() {
           obtenerResumenInscripciones(),
           obtenerTotalUtilidadInversiones(),
           obtenerTotalRecaudadoIntereses(),
-          obtenerTotalCapitalPrestado(),
-          obtenerTotalAbonosCapital()
+          obtenerTotalCapitalPrestado()
         ])
 
         totalCuotas = recaudoCuotas?.valorTotal || 0
@@ -200,7 +194,6 @@ export default function CajaPage() {
         totalUtilidadInversiones = totalUtilidadInversionesResult || 0
         totalInteresesPrestamos = totalInteresesPrestamosResult || 0
         totalCapitalPrestado = totalCapitalPrestadoResult || 0
-        totalAbonosCapital = totalAbonosCapitalResult || 0
       } catch (e: any) {
         console.error('Error obteniendo totales de caja:', e)
       }
@@ -224,16 +217,15 @@ export default function CajaPage() {
       const recaudoTotal = totalCuotas + totalMoras + totalActividades + totalInscripciones + totalUtilidadInversiones + totalInteresesPrestamos
       
       // 🔹 CAPITAL PRESTADO
-      const capitalPrestado = totalCapitalPrestado + totalInversiones - totalAbonosCapital
+      const capitalPrestado = totalCapitalPrestado + totalInversiones
       
       // 🔹 DISPONIBLE EN CAJA
-      const disponible = recaudoTotal-totalCapitalPrestado+totalAbonosCapital -totalInversiones -gastosOperativos
+      const disponible = recaudoTotal - totalCapitalPrestado - totalInversiones - gastosOperativos
       
       // 4️⃣ Al FINAL, hacer UN SOLO setIndicadores
       setIndicadores({
         recaudoTotal,
         capitalPrestado,
-        abonosCapital: totalAbonosCapital,
         gastos: gastosOperativos,
         disponible
       })

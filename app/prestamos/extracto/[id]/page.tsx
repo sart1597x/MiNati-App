@@ -875,7 +875,7 @@ export default function ExtractoPrestamoPage() {
 
       console.error('Error registrando pago:', error)
 
-      alert('Error al registrar el pago. Verifica tu conexión a Supabase.')
+      alert(error instanceof Error ? error.message : 'Error al registrar el pago')
 
     } finally {
 

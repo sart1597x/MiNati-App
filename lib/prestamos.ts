@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 
 import { Socio } from './supabase'
 
-import { crearMovimientoCaja, obtenerUltimoSaldo } from './caja'
+import { crearMovimientoCajaTransaccional } from './caja'
 
 
 
@@ -592,8 +592,6 @@ export async function registrarPagoPrestamo(
 
   const interesCausado = redondear(interesCausadoPorDias + interesPendienteAnterior)
 
- 
-
   // DISTRIBUCIÓN ÚNICA DEL PAGO (sin excepciones)
 
   const interesPagado = Math.min(redondear(valorPagado), interesCausado)
@@ -602,19 +600,33 @@ export async function registrarPagoPrestamo(
 
   const interesPendiente = interesCausado - interesPagado
 
- 
-
   // Calcular nuevo capital pendiente
 
   const capitalPendienteNuevo = Math.max(0, redondear(capitalPendienteAnterior - abonoCapital))
 
- 
+  // VALIDACIONES PARA PREVENIR SOBREPAGO
+
+  if (abonoCapital > capitalPendienteAnterior) {
+    throw new Error(
+      'El abono de capital no puede ser mayor al capital pendiente del préstamo.'
+    )
+  }
+
+  if (valorPagado > capitalPendienteAnterior + interesCausado) {
+    throw new Error(
+      'El pago no puede ser mayor al capital pendiente más los intereses causados.'
+    )
+  }
+
+  if (capitalPendienteNuevo < 0) {
+    throw new Error(
+      'El capital pendiente no puede quedar negativo.'
+    )
+  }
 
   // Calcular nuevo saldo total pendiente
 
   const nuevoSaldo = redondear(capitalPendienteNuevo + interesPendiente)
-
- 
 
   // DETERMINAR TIPO DE MOVIMIENTO AUTOMÁTICAMENTE (derivado del resultado)
 
@@ -622,14 +634,10 @@ export async function registrarPagoPrestamo(
 
   let tipoMov: 'pago_interes' | 'abono_capital' | 'pago_total' = 'pago_interes'
 
- 
-
   // 1. PAGO TOTAL: capital_pendiente_nuevo == 0 AND interes_pendiente == 0
 
   if (capitalPendienteNuevo === 0 && interesPendiente === 0) {
-
     tipoMov = 'pago_total'
-
   }
 
   // 2. PAGO INTERÉS + ABONO A CAPITAL: interes_pagado > 0 AND abono_capital > 0
@@ -637,143 +645,78 @@ export async function registrarPagoPrestamo(
   // (Prioridad sobre "Abono a Capital" solo)
 
   else if (interesPagado > 0 && abonoCapital > 0) {
-
     tipoMov = 'abono_capital' // Se guarda como 'abono_capital' pero el display mostrará "PAGO INTERÉS + ABONO A CAPITAL"
-
   }
 
   // 3. PAGO INTERÉS (SE GENERÓ INTERÉS PENDIENTE): interes_pagado > 0 AND abono_capital == 0 AND interes_pendiente > 0
 
   else if (interesPagado > 0 && abonoCapital === 0 && interesPendiente > 0) {
-
     tipoMov = 'pago_interes'
-
   }
 
   // 4. ABONO A CAPITAL: interes_pagado == 0 AND abono_capital > 0
 
   else if (interesPagado === 0 && abonoCapital > 0) {
-
     tipoMov = 'abono_capital'
-
   }
 
   // Default: pago_interes
 
   else {
-
     tipoMov = 'pago_interes'
-
   }
-
- 
 
   // Crear el movimiento
 
   const movimiento = await crearMovimientoPrestamo({
-
     prestamo_id: prestamoIdNum,
-
     fecha: fechaPago,
-
     valor_pagado: redondear(valorPagado),
-
     tipo_movimiento: tipoMov,
-
     interes_causado: interesCausado,
-
     interes_pagado: interesPagado,
-
     interes_pendiente: interesPendiente,
-
     abono_capital: abonoCapital,
-
     saldo_pendiente: nuevoSaldo,
-
     capital_pendiente: capitalPendienteNuevo,
-
     dias_causados: diasCausados
-
   })
-
- 
 
   // REGISTRAR MOVIMIENTO EN CAJA CENTRAL (solo si hay pago efectivo)
 
   if (interesPagado > 0 || abonoCapital > 0) {
+    const montoTotalCaja = redondear(interesPagado + abonoCapital)
 
-    try {
+    // Concepto: "Pago préstamo – {nombre_prestamista}"
 
-      const montoTotalCaja = redondear(interesPagado + abonoCapital)
+    const concepto = `Pago préstamo – ${prestamo.nombre_prestamista}`
 
-      const saldoAnterior = await obtenerUltimoSaldo()
+    const movimientoCaja = await crearMovimientoCajaTransaccional({
+      tipo: 'INGRESO',
+      concepto: concepto,
+      monto: montoTotalCaja,
+      fecha: fechaPago
+    })
 
-      const nuevoSaldoCaja = redondear(saldoAnterior + montoTotalCaja)
-
-     
-
-      // Concepto: "Pago préstamo – {nombre_prestamista}"
-
-      const concepto = `Pago préstamo – ${prestamo.nombre_prestamista}`
-
-     
-
-      await crearMovimientoCaja({
-
-        tipo: 'INGRESO',
-
-        concepto: concepto,
-
-        monto: montoTotalCaja,
-
-        saldo_anterior: saldoAnterior,
-
-        nuevo_saldo: nuevoSaldoCaja,
-
-        fecha: fechaPago
-
-      })
-
-     
-
-      console.log('💰 Movimiento en Caja Central registrado:', {
-
-        concepto,
-
-        montoTotal: montoTotalCaja.toLocaleString(),
-
-        interesPagado: interesPagado.toLocaleString(),
-
-        abonoCapital: abonoCapital.toLocaleString(),
-
-        saldoAnterior: saldoAnterior.toLocaleString(),
-
-        nuevoSaldo: nuevoSaldoCaja.toLocaleString()
-
-      })
-
-    } catch (error: any) {
-
-      // Si falla el registro en caja, loguear pero no fallar el pago
-
-      console.error('⚠️ Error registrando movimiento en caja central (pago registrado igualmente):', error)
-
-    }
-
+    console.log('💰 Movimiento en Caja Central registrado:', {
+      concepto,
+      montoTotal: montoTotalCaja.toLocaleString(),
+      interesPagado: interesPagado.toLocaleString(),
+      abonoCapital: abonoCapital.toLocaleString(),
+      saldoAnterior: movimientoCaja.saldo_anterior?.toLocaleString() || 'N/A',
+      nuevoSaldo: movimientoCaja.nuevo_saldo?.toLocaleString() || 'N/A'
+    })
   }
-
- 
 
   // Si el capital y los intereses están pagados, marcar préstamo como pagado
 
   if (capitalPendienteNuevo === 0 && interesPendiente === 0) {
 
     const nuevoEstado = 'pagado'
-    const capNuevo = 0
 
     await supabase
       .from('prestamos')
-      .update({ estado: nuevoEstado, monto: capNuevo })
+      .update({ estado: nuevoEstado })
       .eq('id', prestamoIdNum)
 
   }
@@ -1686,44 +1629,62 @@ export async function eliminarPagoPrestamo(movimientoId: number | string): Promi
 
 }
 
-// ...
-
 export async function obtenerTotalCapitalPrestado(): Promise<number> {
-
-  const { data, error } = await supabase
-
+  // Consulta 1: Obtener IDs de préstamos activos
+  const { data: prestamosActivos, error: errorPrestamos } = await supabase
     .from('prestamos')
+    .select('id')
+    .eq('estado', 'activo')
 
-    .select('monto')
+  if (errorPrestamos) throw errorPrestamos
 
-
-
-  if (error) {
-
-    console.error('Error obteniendo total capital prestado:', error)
-
-    throw error
-
+  if (!prestamosActivos || prestamosActivos.length === 0) {
+    return 0
   }
 
+  const prestamoIds = prestamosActivos.map(p => p.id)
 
+  // Consulta 2: Obtener todos los movimientos de esos préstamos
+  const { data: movimientos, error: errorMovimientos } = await supabase
+    .from('pagos_prestamos')
+    .select('prestamo_id, capital_pendiente, fecha, id')
+    .in('prestamo_id', prestamoIds)
+    .order('fecha', { ascending: true })
+    .order('id', { ascending: true })
 
-  const total = data?.reduce((acc, p) => {
+  if (errorMovimientos) throw errorMovimientos
 
-    return acc + (Number(p.monto) || 0)
+  // Procesamiento en memoria: Obtener último movimiento por préstamo
+  const ultimoMovimientoPorPrestamo = new Map<number, { capital_pendiente: number }>()
 
-  }, 0) || 0
+  for (const movimiento of movimientos || []) {
+    ultimoMovimientoPorPrestamo.set(movimiento.prestamo_id, movimiento)
+  }
 
+  // Sumar capital_pendiente de los últimos movimientos
+  let totalCapital = 0
+  let prestamosSinMovimiento = 0
 
+  for (const prestamo of prestamosActivos) {
+    const ultimoMovimiento = ultimoMovimientoPorPrestamo.get(prestamo.id)
+    if (ultimoMovimiento) {
+      totalCapital += (ultimoMovimiento.capital_pendiente || 0)
+    } else {
+      // Préstamo activo sin movimientos: inconsistencia
+      console.warn(`⚠️ Préstamo activo #${prestamo.id} sin movimientos en pagos_prestamos`)
+      prestamosSinMovimiento++
+    }
+  }
 
-  return total
+  if (prestamosSinMovimiento > 0) {
+    console.warn(`⚠️ ${prestamosSinMovimiento} préstamos activos sin movimientos`)
+  }
 
+  return totalCapital
 }
 
 export async function obtenerTotalAbonosCapital(): Promise<number> {
-
   const { data, error } = await supabase
-
     .from('pagos_prestamos')
 
     .select('abono_capital')
