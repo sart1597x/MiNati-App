@@ -123,6 +123,33 @@ export async function obtenerResumenInscripciones(): Promise<{ cantidad: number;
 }
 
 /**
+ * Obtener recaudo histórico de inscripciones
+ * Retorna valor total de inscripciones que fueron efectivamente pagadas
+ * Incluye inscripciones con estado = 'PAGADA' o 'RETIRADA'
+ * (RETIRADA significa que fue pagada y luego devuelta al asociado)
+ * Esta función se usa para el cálculo de Recaudo Total en Caja Central
+ */
+export async function obtenerRecaudoHistoricoInscripciones(): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('inscripciones')
+      .select('valor')
+      .in('estado', ['PAGADA', 'RETIRADA'])
+
+    if (error) throw error
+
+    const valorTotal = Array.isArray(data)
+      ? data.reduce((sum, inscripcion) => sum + (Number(inscripcion.valor) || 0), 0)
+      : 0
+
+    return valorTotal
+  } catch (error: any) {
+    console.warn('Error obteniendo recaudo histórico de inscripciones:', error?.message)
+    return 0
+  }
+}
+
+/**
  * Marcar inscripción como PAGADA
  * - Actualiza estado
  * - Registra ingreso en caja

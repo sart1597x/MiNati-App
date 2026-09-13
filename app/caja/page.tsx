@@ -9,7 +9,7 @@ import { obtenerPrestamos, obtenerMovimientosPrestamo, obtenerTotalRecaudadoInte
 import { supabase } from '@/lib/supabase'
 import { obtenerMovimientosCaja, obtenerSaldoTotal, crearMovimientoCaja, obtenerUltimoSaldo, MovimientoCaja, calcularEstadosCaja } from '@/lib/caja'
 import { obtenerConfiguracionNacional } from '@/lib/configuracion'
-import { obtenerResumenInscripciones } from '@/lib/inscripciones'
+import { obtenerResumenInscripciones, obtenerRecaudoHistoricoInscripciones } from '@/lib/inscripciones'
 import { obtenerTotalRecaudoActividades } from '@/lib/actividades'
 import { obtenerTotalInversiones, obtenerTotalUtilidadInversiones } from '@/lib/inversiones'
 
@@ -171,6 +171,7 @@ export default function CajaPage() {
           totalMorasResult,
           totalActividadesResult,
           resumenInscripcionesTemp,
+          recaudoHistoricoInscripcionesTemp,
           totalUtilidadInversionesResult,
           totalInteresesPrestamosResult,
           totalCapitalPrestadoResult
@@ -180,6 +181,7 @@ export default function CajaPage() {
           obtenerTotalRecaudadoMoras(),
           obtenerTotalRecaudoActividades(),
           obtenerResumenInscripciones(),
+          obtenerRecaudoHistoricoInscripciones(),
           obtenerTotalUtilidadInversiones(),
           obtenerTotalRecaudadoIntereses(),
           obtenerTotalCapitalPrestado()
@@ -190,7 +192,7 @@ export default function CajaPage() {
         totalMoras = totalMorasResult || 0
         totalActividades = totalActividadesResult || 0
         resumenInscripcionesResult = resumenInscripcionesTemp
-        totalInscripciones = resumenInscripcionesResult?.valorTotal || 0
+        totalInscripciones = recaudoHistoricoInscripcionesTemp || 0
         totalUtilidadInversiones = totalUtilidadInversionesResult || 0
         totalInteresesPrestamos = totalInteresesPrestamosResult || 0
         totalCapitalPrestado = totalCapitalPrestadoResult || 0
