@@ -8,6 +8,7 @@ import { getSocios } from '@/lib/socios'
 import {
   obtenerActividades,
   crearActividad,
+  actualizarActividad,
   eliminarActividad,
   obtenerCaritasActividad,
   obtenerCaritasSocioActividad,
@@ -43,12 +44,22 @@ export default function ActividadesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorTablas, setErrorTablas] = useState<string | null>(null)
   
-  // Formulario de actividad (NO MODIFICAR según instrucciones)
+  // Formulario de actividad
   const [nombreActividad, setNombreActividad] = useState('')
   const [fechaActividad, setFechaActividad] = useState(new Date().toISOString().split('T')[0])
   const [valor, setValor] = useState('')
   const [cantidad, setCantidad] = useState('1')
   const [premio, setPremio] = useState('')
+  const [huboGanador, setHuboGanador] = useState(false)
+  
+  // Modal de edición
+  const [showModalEditar, setShowModalEditar] = useState(false)
+  const [actividadAEditar, setActividadAEditar] = useState<Actividad | null>(null)
+  
+  // Modal de premio
+  const [showModalPremio, setShowModalPremio] = useState(false)
+  const [actividadPremio, setActividadPremio] = useState<Actividad | null>(null)
+  const [valorPremio, setValorPremio] = useState('')
   
   // Modal de pago de caritas
   const [showModalPago, setShowModalPago] = useState(false)
@@ -112,7 +123,7 @@ export default function ActividadesPage() {
     }
   }
 
-  const loadCaritasYPagos = async (actividadId: number) => {
+  const loadCaritasYPagos = async (actividadId: string) => {
     try {
       setErrorTablas(null)
       const [caritasData, pagosData] = await Promise.all([
@@ -137,7 +148,7 @@ export default function ActividadesPage() {
   const handleCrearActividad = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!nombreActividad || !valor || !premio || !cantidad) {
+    if (!nombreActividad || !valor || !cantidad) {
       alert('Por favor completa todos los campos obligatorios')
       return
     }
@@ -153,7 +164,9 @@ export default function ActividadesPage() {
       const datosActividad: any = {
         nombre: nombreActividad,
         valor: parseFloat(valor),
-        ganancia_total: parseFloat(premio),
+        ganancia_total: premio ? parseFloat(premio) : 0, // Mantener compatibilidad
+        hubo_ganador: false, // Por defecto NO ganador, se activa con switch
+        premio_pagado: premio ? parseFloat(premio) : 0, // Guardar premio si se especifica
         fecha: fechaActividad,
         cantidad: cantidadNum
       }
@@ -167,10 +180,154 @@ export default function ActividadesPage() {
       setValor('')
       setCantidad('1')
       setPremio('')
+      setHuboGanador(false)
       alert('Actividad creada exitosamente')
     } catch (error) {
       console.error('Error creating actividad:', error)
       alert('Error al crear la actividad')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleAbrirEditar = (actividad: Actividad) => {
+    setActividadAEditar(actividad)
+    setNombreActividad(actividad.nombre || '')
+    setFechaActividad(actividad.fecha || new Date().toISOString().split('T')[0])
+    setValor((actividad.valor || 0).toString())
+    setCantidad((actividad.cantidad || 1).toString())
+    setShowModalEditar(true)
+  }
+
+  const handleCambiarGanador = async (actividad: Actividad, nuevoEstado: boolean) => {
+    if (!actividad.id) return
+
+    if (nuevoEstado) {
+      // Cambiando a SÍ: si ya tiene premio_pagado, usarlo directamente
+      const premioExistente = actividad.premio_pagado || 0
+      
+      if (premioExistente > 0) {
+        // Ya tiene premio, simplemente activar y recalcular
+        try {
+          setSubmitting(true)
+          await actualizarActividad(actividad.id, {
+            hubo_ganador: true,
+            ganancia_total: premioExistente
+          })
+          await loadData()
+        } catch (error) {
+          console.error('Error cambiando estado de ganador:', error)
+          alert('Error al cambiar el estado de ganador')
+        } finally {
+          setSubmitting(false)
+        }
+      } else {
+        // No tiene premio, abrir modal para ingresarlo
+        setActividadPremio(actividad)
+        setValorPremio((actividad.premio_pagado || 0).toString())
+        setShowModalPremio(true)
+      }
+    } else {
+      // Cambiando a NO: eliminar premio y movimiento de caja
+      if (!confirm('¿Estás seguro de cambiar a NO ganador? Esto eliminará el premio y el movimiento de Caja asociado.')) {
+        return
+      }
+
+      try {
+        setSubmitting(true)
+        await actualizarActividad(actividad.id, {
+          hubo_ganador: false,
+          premio_pagado: 0,
+          ganancia_total: 0
+        })
+        await loadData()
+      } catch (error) {
+        console.error('Error cambiando estado de ganador:', error)
+        alert('Error al cambiar el estado de ganador')
+      } finally {
+        setSubmitting(false)
+      }
+    }
+  }
+
+  const handleGuardarPremio = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!actividadPremio?.id) return
+    
+    if (!valorPremio) {
+      alert('Por favor ingresa el valor del premio')
+      return
+    }
+
+    const premioNum = parseFloat(valorPremio)
+    if (isNaN(premioNum) || premioNum <= 0) {
+      alert('El premio debe ser mayor que 0')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      await actualizarActividad(actividadPremio.id, {
+        hubo_ganador: true,
+        premio_pagado: premioNum,
+        ganancia_total: premioNum
+      })
+      
+      await loadData()
+      setShowModalPremio(false)
+      setActividadPremio(null)
+      setValorPremio('')
+      alert('Premio guardado exitosamente')
+    } catch (error: any) {
+      console.error('Error guardando premio:', error)
+      const errorMessage = error?.message || error?.toString() || 'Error desconocido'
+      const errorCode = error?.code || 'N/A'
+      const errorDetails = error?.details || 'N/A'
+      alert(`Error al guardar el premio:\n\nMensaje: ${errorMessage}\nCódigo: ${errorCode}\nDetalles: ${errorDetails}`)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleEditarActividad = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!actividadAEditar?.id) return
+    
+    if (!nombreActividad || !valor || !cantidad) {
+      alert('Por favor completa todos los campos obligatorios')
+      return
+    }
+
+    const cantidadNum = parseInt(cantidad)
+    if (isNaN(cantidadNum) || cantidadNum < 1) {
+      alert('La cantidad debe ser un número entero mayor o igual a 1')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const datosActividad: any = {
+        nombre: nombreActividad,
+        valor: parseFloat(valor),
+        fecha: fechaActividad,
+        cantidad: cantidadNum
+      }
+      
+      await actualizarActividad(actividadAEditar.id, datosActividad)
+      
+      await loadData()
+      setShowModalEditar(false)
+      setActividadAEditar(null)
+      setNombreActividad('')
+      setFechaActividad(new Date().toISOString().split('T')[0])
+      setValor('')
+      setCantidad('1')
+      alert('Actividad actualizada exitosamente')
+    } catch (error) {
+      console.error('Error updating actividad:', error)
+      alert('Error al actualizar la actividad')
     } finally {
       setSubmitting(false)
     }
@@ -441,8 +598,10 @@ export default function ActividadesPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Actividad</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Cantidad Pagadas</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Total</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Ganador</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Premio</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Utilidad</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Editar</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Ingresar</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-300 uppercase">Eliminar</th>
                     </tr>
@@ -488,11 +647,40 @@ export default function ActividadesPage() {
                           <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
                             ${totalRecaudado.toLocaleString()}
                           </td>
-                          <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
-                            ${(actividad?.ganancia_total || 0).toLocaleString()}
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <span className={`text-sm font-medium ${actividad?.hubo_ganador ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                                {actividad?.hubo_ganador ? 'SÍ' : 'NO'}
+                              </span>
+                              <button
+                                onClick={() => handleCambiarGanador(actividad, !actividad?.hubo_ganador)}
+                                disabled={submitting || !actividad?.id}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                  actividad?.hubo_ganador ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    actividad?.hubo_ganador ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
-                            ${(actividad?.utilidad_neta || 0).toLocaleString()}
+                            ${((actividad?.hubo_ganador && actividad?.premio_pagado) ? actividad.premio_pagado : 0).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
+                            ${(actividad?.hubo_ganador ? (totalRecaudado - (actividad?.premio_pagado || 0)) : totalRecaudado).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleAbrirEditar(actividad)}
+                              disabled={!actividad || !actividad.id}
+                              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Editar
+                            </button>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button
@@ -607,7 +795,7 @@ export default function ActividadesPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Premio *
+                      Valor del premio (opcional)
                     </label>
                     <input
                       type="number"
@@ -616,10 +804,9 @@ export default function ActividadesPage() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       min="0"
                       step="any"
-                      required
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Valor que la actividad entregará como premio.
+                      Valor del premio si hay ganador. Puedes activarlo después con el switch.
                     </p>
                   </div>
 
@@ -634,6 +821,166 @@ export default function ActividadesPage() {
                     <button
                       type="button"
                       onClick={() => setShowModalActividad(false)}
+                      className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal para Ingresar Premio */}
+          {showModalPremio && actividadPremio && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
+                  Establecer Premio
+                </h2>
+                
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Actividad:</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {actividadPremio.nombre}
+                  </p>
+                </div>
+
+                <form onSubmit={handleGuardarPremio} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Valor del premio pagado *
+                    </label>
+                    <input
+                      type="number"
+                      value={valorPremio}
+                      onChange={(e) => setValorPremio(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      min="0"
+                      step="any"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Valor real del premio pagado al ganador.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {submitting ? 'Guardando...' : 'Guardar Premio'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModalPremio(false)
+                        setActividadPremio(null)
+                        setValorPremio('')
+                      }}
+                      className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal para Editar Actividad */}
+          {showModalEditar && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
+                  Editar Actividad
+                </h2>
+                
+                <form onSubmit={handleEditarActividad} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nombre de la Actividad *
+                    </label>
+                    <input
+                      type="text"
+                      value={nombreActividad}
+                      onChange={(e) => setNombreActividad(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Fecha *
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaActividad}
+                      onChange={(e) => setFechaActividad(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Valor *
+                    </label>
+                    <input
+                      type="number"
+                      value={valor}
+                      onChange={(e) => setValor(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      min="0"
+                      step="any"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Valor que pagará cada asociado por concepto de boleta, bingo, rifa, etc.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Cantidad *
+                    </label>
+                    <input
+                      type="number"
+                      value={cantidad}
+                      onChange={(e) => setCantidad(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      min="1"
+                      step="1"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Número de caritas (boletas/tablas) que se crearán por defecto para cada asociado.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50"
+                    >
+                      {submitting ? 'Actualizando...' : 'Actualizar Actividad'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModalEditar(false)
+                        setActividadAEditar(null)
+                        setNombreActividad('')
+                        setFechaActividad(new Date().toISOString().split('T')[0])
+                        setValor('')
+                        setCantidad('1')
+                        setPremio('')
+                        setHuboGanador(false)
+                      }}
                       className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
                     >
                       Cancelar

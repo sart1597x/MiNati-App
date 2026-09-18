@@ -3,13 +3,15 @@ import { getSocios } from './socios'
 import { crearMovimientoCaja, obtenerUltimoSaldo } from './caja'
 
 export interface Actividad {
-  id?: number
+  id?: string  // UUID en Supabase (confirmado por usuario con NATIPOLLA)
   nombre: string
   valor?: number  // Valor que pagará cada asociado por carita
   cantidad?: number  // Número de caritas por defecto para cada asociado
   descripcion?: string
-  ganancia_total: number  // Premio (valor que la actividad entregará como premio)
+  ganancia_total: number  // Premio (campo antiguo, mantener por compatibilidad)
   utilidad_neta: number  // Utilidad = (total_pagado de todas las caritas) − premio
+  hubo_ganador?: boolean  // Indica si hubo ganador
+  premio_pagado?: number  // Valor real del premio pagado (solo si hubo_ganador = true)
   fecha?: string
   created_at?: string
   updated_at?: string
@@ -17,8 +19,8 @@ export interface Actividad {
 
 // Interface para caritas de actividades (tabla actividades_caritas)
 export interface CaritaActividad {
-  id?: number
-  actividad_id: number
+  id?: string  // UUID en Supabase
+  actividad_id: string  // UUID en Supabase (FK a actividades.id)
   socio_id: number
   carita_numero: number
   estado: 'PENDIENTE' | 'PAGADO'
@@ -27,8 +29,8 @@ export interface CaritaActividad {
 
 // Interface para pagos de actividades (tabla actividades_pagos)
 export interface PagoActividad {
-  id?: number
-  actividad_id: number
+  id?: string  // UUID en Supabase
+  actividad_id: string  // UUID en Supabase (FK a actividades.id)
   socio_id: number
   carita_numero: number
   monto: number
@@ -76,14 +78,14 @@ export async function obtenerActividades(): Promise<Actividad[]> {
   try {
     const { data, error } = await supabase
       .from('actividades')
-      .select('id, nombre, valor, cantidad, descripcion, ganancia_total, utilidad_neta, fecha, created_at, updated_at')
+      .select('id, nombre, valor, cantidad, descripcion, ganancia_total, utilidad_neta, hubo_ganador, premio_pagado, fecha, created_at, updated_at')
       .order('fecha', { ascending: false })
     
     if (error) {
       if (error.message?.includes('fecha') || error.message?.includes('cantidad') || error.code === '42703') {
         const { data: dataRetry, error: errorRetry } = await supabase
           .from('actividades')
-          .select('id, nombre, valor, descripcion, ganancia_total, utilidad_neta, created_at, updated_at')
+          .select('id, nombre, valor, descripcion, ganancia_total, utilidad_neta, hubo_ganador, premio_pagado, created_at, updated_at')
           .order('created_at', { ascending: false })
         
         if (errorRetry) {
@@ -101,7 +103,7 @@ export async function obtenerActividades(): Promise<Actividad[]> {
       try {
         const { data, error: errorFinal } = await supabase
           .from('actividades')
-          .select('id, nombre, valor, descripcion, ganancia_total, utilidad_neta, created_at, updated_at')
+          .select('id, nombre, valor, descripcion, ganancia_total, utilidad_neta, hubo_ganador, premio_pagado, created_at, updated_at')
           .order('created_at', { ascending: false })
         
         if (errorFinal) {
@@ -119,7 +121,7 @@ export async function obtenerActividades(): Promise<Actividad[]> {
 }
 
 // Obtener una actividad por ID
-export async function obtenerActividadPorId(actividadId: number): Promise<Actividad | null> {
+export async function obtenerActividadPorId(actividadId: string): Promise<Actividad | null> {
   const { data, error } = await supabase
     .from('actividades')
     .select('*')
@@ -135,7 +137,7 @@ export async function obtenerActividadPorId(actividadId: number): Promise<Activi
 }
 
 // Obtener todas las caritas de una actividad (desde actividades_caritas)
-export async function obtenerCaritasActividad(actividadId: number): Promise<CaritaActividad[]> {
+export async function obtenerCaritasActividad(actividadId: string): Promise<CaritaActividad[]> {
   const tablas = await verificarTablasExisten()
   if (!tablas.caritas) {
     lanzarErrorTablasNoExisten()
@@ -165,7 +167,7 @@ export async function obtenerCaritasActividad(actividadId: number): Promise<Cari
 }
 
 // Obtener caritas de un socio específico en una actividad
-export async function obtenerCaritasSocioActividad(actividadId: number, socioId: number): Promise<CaritaActividad[]> {
+export async function obtenerCaritasSocioActividad(actividadId: string, socioId: number): Promise<CaritaActividad[]> {
   const tablas = await verificarTablasExisten()
   if (!tablas.caritas) {
     lanzarErrorTablasNoExisten()
@@ -195,7 +197,7 @@ export async function obtenerCaritasSocioActividad(actividadId: number, socioId:
 }
 
 // Obtener todos los pagos de una actividad (desde actividades_pagos)
-export async function obtenerPagosActividad(actividadId: number): Promise<PagoActividad[]> {
+export async function obtenerPagosActividad(actividadId: string): Promise<PagoActividad[]> {
   const tablas = await verificarTablasExisten()
   if (!tablas.pagos) {
     lanzarErrorTablasNoExisten()
@@ -226,7 +228,7 @@ export async function obtenerPagosActividad(actividadId: number): Promise<PagoAc
 
 // Obtener un pago específico (una carita)
 export async function obtenerPagoActividad(
-  actividadId: number,
+  actividadId: string,
   socioId: number,
   caritaNumero: number
 ): Promise<PagoActividad | null> {
@@ -264,7 +266,7 @@ export async function obtenerPagoActividad(
 // ============================================
 
 // Generar caritas automáticamente al crear una actividad (en actividades_caritas)
-export async function generarCaritasActividad(actividadId: number, cantidadPorSocio: number): Promise<void> {
+export async function generarCaritasActividad(actividadId: string, cantidadPorSocio: number): Promise<void> {
   const tablas = await verificarTablasExisten()
   if (!tablas.caritas) {
     lanzarErrorTablasNoExisten()
@@ -321,7 +323,9 @@ export async function crearActividad(actividad: Omit<Actividad, 'id' | 'created_
   const datosInsertar: any = {
     nombre: actividad.nombre,
     valor: actividad.valor || 0,
-    ganancia_total: actividad.ganancia_total, // Premio
+    ganancia_total: actividad.ganancia_total || 0, // Premio (compatibilidad)
+    hubo_ganador: actividad.hubo_ganador || false,
+    premio_pagado: (actividad.hubo_ganador && actividad.premio_pagado) ? actividad.premio_pagado : 0,
     utilidad_neta: utilidadNeta
   }
   
@@ -351,6 +355,11 @@ export async function crearActividad(actividad: Omit<Actividad, 'id' | 'created_
   if (data && data.id) {
     await generarCaritasActividad(data.id, cantidadPorSocio)
   }
+
+  // Si hubo ganador, crear el movimiento de premio en Caja
+  if (data.hubo_ganador && data.premio_pagado > 0) {
+    await gestionarPremioActividad(data.id, data.nombre, data.hubo_ganador, data.premio_pagado)
+  }
   
   return data
 }
@@ -361,7 +370,7 @@ export async function crearActividad(actividad: Omit<Actividad, 'id' | 'created_
 
 // Registrar pago de una carita (insertar en actividades_pagos y actualizar estado en actividades_caritas)
 export async function registrarPagoActividad(
-  actividadId: number,
+  actividadId: string,
   socioId: number,
   caritaNumero: number,
   fechaPago: Date,
@@ -478,15 +487,14 @@ export async function registrarPagoActividad(
     }
   }
 
-  // Recalcular utilidad de la actividad
-  await recalcularUtilidadActividad(actividadId)
+  // Recalcular utilidad de la actividad (NO IMPLEMENTADO - usa lógica existente en UI)
 
   return data
 }
 
 // Actualizar fecha de pago de una carita
 export async function actualizarPagoActividad(
-  actividadId: number,
+  actividadId: string,
   socioId: number,
   caritaNumero: number,
   fechaPago: Date,
@@ -529,7 +537,7 @@ export async function actualizarPagoActividad(
 
 // Eliminar pago de una carita (eliminar de actividades_pagos y marcar como PENDIENTE en actividades_caritas)
 export async function eliminarPagoActividad(
-  actividadId: number,
+  actividadId: string,
   socioId: number,
   caritaNumero: number
 ): Promise<void> {
@@ -589,12 +597,11 @@ export async function eliminarPagoActividad(
     }
   }
 
-  // Recalcular utilidad
-  await recalcularUtilidadActividad(actividadId)
+  // Recalcular utilidad (NO IMPLEMENTADO - usa lógica existente en UI)
 }
 
 // Agregar una nueva carita a un socio (en actividades_caritas)
-export async function agregarCaritaActividad(actividadId: number, socioId: number): Promise<CaritaActividad> {
+export async function agregarCaritaActividad(actividadId: string, socioId: number): Promise<CaritaActividad> {
   const tablas = await verificarTablasExisten()
   if (!tablas.caritas) {
     lanzarErrorTablasNoExisten()
@@ -627,22 +634,156 @@ export async function agregarCaritaActividad(actividadId: number, socioId: numbe
 // FUNCIONES DE CÁLCULO
 // ============================================
 
-// Recalcular utilidad de una actividad
-export async function recalcularUtilidadActividad(actividadId: number): Promise<void> {
-  const actividad = await obtenerActividadPorId(actividadId)
-  if (!actividad) return
+// Recalcular utilidad de una actividad (NO IMPLEMENTADO - la lógica de cálculo está en la UI)
+export async function recalcularUtilidadActividad(actividadId: string): Promise<void> {
+  // Esta función está deshabilitada porque la lógica de cálculo de utilidad
+  // se maneja en la interfaz de usuario usando hubo_ganador y premio_pagado
+  // No se necesita recálculo en el backend para la funcionalidad de premios
+}
 
-  // Obtener todos los pagos de esta actividad (desde actividades_pagos)
-  const pagos = await obtenerPagosActividad(actividadId)
-  
-  // Calcular total recaudado (suma de monto de todos los pagos)
-  const totalRecaudado = pagos.reduce((sum, p) => sum + (p.monto || 0), 0)
+// ============================================
+// GESTIÓN DE PREMIOS EN CAJA
+// ============================================
 
-  const premio = actividad.ganancia_total || 0
-  const utilidadNeta = totalRecaudado - premio
+// Obtener movimiento de premio de una actividad (usando referencia_id)
+async function obtenerMovimientoPremio(actividadId: string): Promise<any | null> {
+  try {
+    const { data, error } = await supabase
+      .from('caja_central')
+      .select('*')
+      .eq('referencia_id', actividadId)  // UUID directo
+      .eq('tipo', 'EGRESO')
+      .maybeSingle()
 
-  // Actualizar utilidad
-  await actualizarActividad(actividadId, { utilidad_neta: utilidadNeta })
+    if (error) {
+      if (error.code === 'PGRST116') return null
+      throw error
+    }
+
+    return data
+  } catch (error: any) {
+    console.error('Error obteniendo movimiento de premio:', error)
+    return null
+  }
+}
+
+// Crear movimiento de premio en Caja
+async function crearMovimientoPremio(actividadId: string, nombreActividad: string, valorPremio: number): Promise<void> {
+  if (valorPremio <= 0) return
+
+  try {
+    const saldoAnterior = await obtenerUltimoSaldo()
+    const nuevoSaldo = saldoAnterior - valorPremio
+    const hoy = new Date().toISOString().split('T')[0]
+
+    await crearMovimientoCaja({
+      tipo: 'EGRESO',
+      concepto: `Premio ${nombreActividad}`,
+      monto: valorPremio,
+      fecha: hoy,
+      saldo_anterior: saldoAnterior,
+      nuevo_saldo: nuevoSaldo,
+      referencia_id: actividadId  // UUID directo
+    })
+
+    console.log(`✅ EGRESO de premio creado: ${nombreActividad} - $${valorPremio.toLocaleString()}`)
+  } catch (error: any) {
+    console.error('Error creando movimiento de premio:', error)
+    throw error
+  }
+}
+
+// Actualizar movimiento de premio en Caja
+async function actualizarMovimientoPremio(actividadId: string, nombreActividad: string, valorPremio: number): Promise<void> {
+  if (valorPremio <= 0) return
+
+  try {
+    const movimientoExistente = await obtenerMovimientoPremio(actividadId)
+    
+    if (!movimientoExistente) {
+      // Si no existe, crearlo
+      await crearMovimientoPremio(actividadId, nombreActividad, valorPremio)
+      return
+    }
+
+    // Calcular la diferencia para ajustar el saldo
+    const diferencia = valorPremio - movimientoExistente.monto
+    
+    if (diferencia === 0) {
+      // No hay cambio, no hacer nada
+      return
+    }
+
+    // Eliminar el movimiento anterior
+    const { error: errorEliminar } = await supabase
+      .from('caja_central')
+      .delete()
+      .eq('id', movimientoExistente.id)
+
+    if (errorEliminar) throw errorEliminar
+
+    // Crear nuevo movimiento con el valor actualizado
+    await crearMovimientoPremio(actividadId, nombreActividad, valorPremio)
+
+    console.log(`✅ EGRESO de premio actualizado: ${nombreActividad} - $${valorPremio.toLocaleString()}`)
+  } catch (error: any) {
+    console.error('Error actualizando movimiento de premio:', error)
+    throw error
+  }
+}
+
+// Eliminar movimiento de premio en Caja
+async function eliminarMovimientoPremio(actividadId: string): Promise<void> {
+  try {
+    const movimientoExistente = await obtenerMovimientoPremio(actividadId)
+    
+    if (!movimientoExistente) {
+      // No hay movimiento que eliminar
+      return
+    }
+
+    // Eliminar el movimiento
+    const { error: errorEliminar } = await supabase
+      .from('caja_central')
+      .delete()
+      .eq('id', movimientoExistente.id)
+
+    if (errorEliminar) throw errorEliminar
+
+    console.log(`✅ EGRESO de premio eliminado para actividad ID ${actividadId}`)
+  } catch (error: any) {
+    console.error('Error eliminando movimiento de premio:', error)
+    throw error
+  }
+}
+
+// Gestionar premio de actividad (crear, actualizar o eliminar según corresponda)
+export async function gestionarPremioActividad(
+  actividadId: string,
+  nombreActividad: string,
+  huboGanador: boolean,
+  premioPagado: number
+): Promise<void> {
+  try {
+    if (huboGanador && premioPagado > 0) {
+      // Hubo ganador: crear o actualizar el movimiento
+      const movimientoExistente = await obtenerMovimientoPremio(actividadId)
+      
+      if (movimientoExistente) {
+        // Actualizar si el valor cambió
+        await actualizarMovimientoPremio(actividadId, nombreActividad, premioPagado)
+      } else {
+        // Crear nuevo movimiento
+        await crearMovimientoPremio(actividadId, nombreActividad, premioPagado)
+      }
+    } else {
+      // No hubo ganador o premio es 0: eliminar movimiento si existe
+      await eliminarMovimientoPremio(actividadId)
+    }
+  } catch (error: any) {
+    console.error('Error gestionando premio de actividad:', error)
+    throw error
+  }
 }
 
 // ============================================
@@ -651,9 +792,20 @@ export async function recalcularUtilidadActividad(actividadId: number): Promise<
 
 // Actualizar una actividad
 export async function actualizarActividad(
-  actividadId: number,
+  actividadId: string,  // UUID de actividades
   cambios: Partial<Actividad>
 ): Promise<Actividad> {
+  // Obtener actividad actual antes de actualizar
+  const actividadActual = await obtenerActividadPorId(actividadId)
+  if (!actividadActual) {
+    throw new Error('Actividad no encontrada')
+  }
+
+  // Detectar si cambió hubo_ganador o premio_pagado
+  const cambioHuboGanador = cambios.hubo_ganador !== undefined && cambios.hubo_ganador !== actividadActual.hubo_ganador
+  const cambioPremioPagado = cambios.premio_pagado !== undefined && cambios.premio_pagado !== actividadActual.premio_pagado
+
+  // Actualizar la actividad
   const { data, error } = await supabase
     .from('actividades')
     .update({ ...cambios, updated_at: new Date().toISOString() })
@@ -664,11 +816,23 @@ export async function actualizarActividad(
   if (error) {
     throw new Error(`Error al actualizar actividad: ${error.message}`)
   }
+
+  // Si cambió hubo_ganador o premio_pagado, gestionar el movimiento de Caja
+  if (cambioHuboGanador || cambioPremioPagado) {
+    const nombreActividad = data.nombre || actividadActual.nombre || 'Actividad'
+    const nuevoHuboGanador = cambios.hubo_ganador !== undefined ? cambios.hubo_ganador : (actividadActual.hubo_ganador || false)
+    const nuevoPremioPagado = cambios.premio_pagado !== undefined ? cambios.premio_pagado : (actividadActual.premio_pagado || 0)
+
+    await gestionarPremioActividad(actividadId, nombreActividad, nuevoHuboGanador, nuevoPremioPagado)
+  }
+
+  // Recalcular utilidad después de actualizar (NO IMPLEMENTADO - usa lógica existente en UI)
+
   return data
 }
 
 // Eliminar una actividad y todas sus caritas
-export async function eliminarActividad(actividadId: number): Promise<void> {
+export async function eliminarActividad(actividadId: string): Promise<void> {
   // Las caritas y pagos se eliminan automáticamente por CASCADE
   // Eliminar la actividad
   const { error } = await supabase
