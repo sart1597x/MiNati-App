@@ -15,6 +15,12 @@ export default function MorasPage() {
   const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0])
   const [valorRecibido, setValorRecibido] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  
+  // Estados para filtrado y selección múltiple
+  const [busqueda, setBusqueda] = useState('')
+  const [asociadosSeleccionados, setAsociadosSeleccionados] = useState<string[]>([])
+  const [showSelectorAsociados, setShowSelectorAsociados] = useState(false)
+  const [busquedaSelector, setBusquedaSelector] = useState('')
 
   useEffect(() => {
     // Función para inicializar: generar moras automáticas y luego cargar
@@ -252,6 +258,66 @@ export default function MorasPage() {
     window.print()
   }
 
+  // Obtener lista única de asociados desde las moras
+  const obtenerAsociadosUnicos = (): { cedula: string; nombre: string }[] => {
+    const asociadosMap = new Map<string, string>()
+    moras.forEach(mora => {
+      if (!asociadosMap.has(mora.cedula)) {
+        asociadosMap.set(mora.cedula, mora.nombre)
+      }
+    })
+    return Array.from(asociadosMap.entries()).map(([cedula, nombre]) => ({ cedula, nombre }))
+  }
+
+  // Filtrar moras según búsqueda y selección
+  const filtrarMoras = (): Mora[] => {
+    let morasFiltradas = [...moras]
+
+    // Filtrar por búsqueda (nombre o cédula)
+    if (busqueda.trim()) {
+      const busquedaLower = busqueda.toLowerCase()
+      morasFiltradas = morasFiltradas.filter(mora =>
+        mora.nombre.toLowerCase().includes(busquedaLower) ||
+        mora.cedula.toLowerCase().includes(busquedaLower)
+      )
+    }
+
+    // Filtrar por asociados seleccionados
+    if (asociadosSeleccionados.length > 0) {
+      morasFiltradas = morasFiltradas.filter(mora =>
+        asociadosSeleccionados.includes(mora.cedula)
+      )
+    }
+
+    return morasFiltradas
+  }
+
+  // Calcular total de moras pendientes (columna Resta)
+  const calcularTotalResta = (): number => {
+    const morasFiltradas = filtrarMoras()
+    return morasFiltradas.reduce((total, mora) => total + mora.resta, 0)
+  }
+
+  // Manejar selección de asociados
+  const toggleAsociadoSeleccionado = (cedula: string) => {
+    setAsociadosSeleccionados(prev =>
+      prev.includes(cedula)
+        ? prev.filter(c => c !== cedula)
+        : [...prev, cedula]
+    )
+  }
+
+  // Limpiar selección de asociados
+  const limpiarSeleccion = () => {
+    setAsociadosSeleccionados([])
+  }
+
+  // Seleccionar todos los asociados visibles
+  const seleccionarTodos = () => {
+    const asociadosUnicos = obtenerAsociadosUnicos()
+    setAsociadosSeleccionados(asociadosUnicos.map(a => a.cedula))
+  }
+
   const handleEliminarMora = async (mora: Mora) => {
     const confirmacion = window.confirm(
       `¿Estás seguro de eliminar esta mora?\n\n` +
@@ -398,6 +464,129 @@ export default function MorasPage() {
           </div>
         </div>
 
+        {/* Filtros y Búsqueda */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mb-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Búsqueda por nombre/cédula */}
+            <div className="flex-1">
+              <label htmlFor="busqueda" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Buscar por nombre o cédula
+              </label>
+              <input
+                type="text"
+                id="busqueda"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Ej: ZABALETA o 12345678"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+
+            {/* Selector de asociados */}
+            <div className="flex-1 relative">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Filtrar por asociados ({asociadosSeleccionados.length} seleccionados)
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSelectorAsociados(!showSelectorAsociados)}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-left"
+                >
+                  {asociadosSeleccionados.length > 0
+                    ? `${asociadosSeleccionados.length} asociado(s) seleccionado(s)`
+                    : 'Seleccionar asociados...'}
+                </button>
+                {asociadosSeleccionados.length > 0 && (
+                  <button
+                    onClick={limpiarSeleccion}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                    title="Limpiar selección"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Tags de asociados seleccionados */}
+              {asociadosSeleccionados.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {asociadosSeleccionados.slice(0, 5).map(cedula => {
+                    const asociado = obtenerAsociadosUnicos().find(a => a.cedula === cedula)
+                    return (
+                      <span
+                        key={cedula}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs"
+                      >
+                        {asociado?.nombre || cedula}
+                        <button
+                          onClick={() => toggleAsociadoSeleccionado(cedula)}
+                          className="ml-1 hover:text-blue-600 dark:hover:text-blue-300"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )
+                  })}
+                  {asociadosSeleccionados.length > 5 && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      +{asociadosSeleccionados.length - 5} más
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Dropdown selector de asociados */}
+              {showSelectorAsociados && (
+                <div className="absolute z-50 mt-2 w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-300 dark:border-gray-600 max-h-64 overflow-y-auto">
+                  <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                    <input
+                      type="text"
+                      value={busquedaSelector}
+                      onChange={(e) => setBusquedaSelector(e.target.value)}
+                      placeholder="Buscar asociado..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                    />
+                  </div>
+                  <div className="p-2">
+                    <button
+                      onClick={seleccionarTodos}
+                      className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm mb-2 transition-colors"
+                    >
+                      Seleccionar todos
+                    </button>
+                    {obtenerAsociadosUnicos()
+                      .filter(a =>
+                        a.nombre.toLowerCase().includes(busquedaSelector.toLowerCase()) ||
+                        a.cedula.toLowerCase().includes(busquedaSelector.toLowerCase())
+                      )
+                      .map(asociado => (
+                        <div
+                          key={asociado.cedula}
+                          onClick={() => toggleAsociadoSeleccionado(asociado.cedula)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors ${
+                            asociadosSeleccionados.includes(asociado.cedula)
+                              ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={asociadosSeleccionados.includes(asociado.cedula)}
+                            onChange={() => {}}
+                            className="rounded"
+                            readOnly
+                          />
+                          <span className="text-sm">{asociado.nombre}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{asociado.cedula}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Tabla de Moras */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
           <div className="overflow-x-auto w-full">
@@ -418,15 +607,16 @@ export default function MorasPage() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {(() => {
-                  // Ordenar moras: primero por cuota, luego por cédula
-                  const morasOrdenadas = [...moras].sort((a, b) => {
+                  // Filtrar y ordenar moras
+                  const morasFiltradas = filtrarMoras()
+                  const morasOrdenadas = morasFiltradas.sort((a, b) => {
                     // 1. Ordenar por Cuota
                     if (a.numero_cuota !== b.numero_cuota) {
                       return a.numero_cuota - b.numero_cuota;
                     }
-                    // 2. Ordenar por Cédula (buscando en el objeto relacionado)
-                    const cedA = parseInt(a.asociados?.cedula || a.cedula || '0');
-                    const cedB = parseInt(b.asociados?.cedula || b.cedula || '0');
+                    // 2. Ordenar por Cédula
+                    const cedA = parseInt(a.cedula || '0');
+                    const cedB = parseInt(b.cedula || '0');
                     return cedA - cedB;
                   });
 
@@ -477,6 +667,18 @@ export default function MorasPage() {
                 })()}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Totalizador de Moras Pendientes */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mt-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Total Mora Pendiente ({filtrarMoras().length} registro{filtrarMoras().length !== 1 ? 's' : ''}):
+            </span>
+            <span className="text-2xl font-bold text-red-600 dark:text-red-400">
+              ${calcularTotalResta().toLocaleString()}
+            </span>
           </div>
         </div>
 
