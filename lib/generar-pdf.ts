@@ -133,22 +133,32 @@ export async function descargarNaticreditoPDF(datos: DatosNaticredito) {
   doc.save(`Naticredito_${datos.nombreAsociado.replace(/\s+/g, '_')}.pdf`)
 }
 
-export async function copiarNaticreditoPDF(datos: DatosNaticredito) {
+export async function compartirNaticreditoPDF(datos: DatosNaticredito): Promise<boolean> {
   try {
     const doc = generarPdfNaticredito(datos)
     const pdfBlob = doc.output('blob') as Blob
-    if (navigator.clipboard && navigator.clipboard.write) {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'application/pdf': pdfBlob
-        })
-      ])
+    const pdfFile = new File([pdfBlob], `Naticredito_${datos.nombreAsociado.replace(/\s+/g, '_')}.pdf`, {
+      type: 'application/pdf'
+    })
+
+    // Verificar si el navegador soporta compartir archivos
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+      await navigator.share({
+        files: [pdfFile],
+        title: 'Naticrédito',
+        text: `Naticrédito de ${datos.nombreAsociado}`
+      })
       return true
     } else {
+      // Si no soporta compartir, descargar automáticamente
+      doc.save(`Naticredito_${datos.nombreAsociado.replace(/\s+/g, '_')}.pdf`)
       return false
     }
   } catch (error) {
-    console.error('Error al copiar PDF:', error)
+    console.error('Error al compartir PDF:', error)
+    // Si hay error, descargar automáticamente
+    const doc = generarPdfNaticredito(datos)
+    doc.save(`Naticredito_${datos.nombreAsociado.replace(/\s+/g, '_')}.pdf`)
     return false
   }
 }

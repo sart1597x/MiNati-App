@@ -106,13 +106,28 @@ export default function ListaPrestamosPage() {
       setTokenUrl(data.publicUrl)
       setPrestamoSeleccionado(prestamo)
       setShowNaticreditoModal(true)
-      await loadPrestamos()
+
+      // Actualizar estado local sin recargar toda la página
+      setPrestamos(prevPrestamos =>
+        prevPrestamos.map(p =>
+          p.id === prestamo.id ? { ...p, public_token: data.publicToken } : p
+        )
+      )
     } catch (error) {
       console.error('Error generando token:', error)
       alert('Error al generar el enlace')
     } finally {
       setGenerandoToken(null)
     }
+  }
+
+  const handleVerPDF = (prestamo: Prestamo) => {
+    if (!prestamo.public_token) return
+    const origin = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+    const publicUrl = `${origin}/prestamos/public/${prestamo.public_token}`
+    setTokenUrl(publicUrl)
+    setPrestamoSeleccionado(prestamo)
+    setShowNaticreditoModal(true)
   }
 
   const handleRevocarToken = async (prestamo: Prestamo) => {
@@ -138,7 +153,13 @@ export default function ListaPrestamosPage() {
 
       alert('Enlace revocado exitosamente')
       setTokenUrl(null)
-      await loadPrestamos()
+
+      // Actualizar estado local sin recargar toda la página
+      setPrestamos(prevPrestamos =>
+        prevPrestamos.map(p =>
+          p.id === prestamo.id ? { ...p, public_token: undefined } : p
+        )
+      )
     } catch (error) {
       console.error('Error revocando token:', error)
       alert('Error al revocar el enlace')
@@ -256,22 +277,34 @@ export default function ListaPrestamosPage() {
                             <Eye className="w-4 h-4" />
                             <span>🔍 Ver extracto</span>
                           </Link>
-                          <button
-                            onClick={() => handleGenerarToken(prestamo)}
-                            disabled={generandoToken === prestamo.id}
-                            className="flex items-center gap-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Share2 className="w-4 h-4" />
-                            <span>{generandoToken === prestamo.id ? '⏳ Cargando...' : '🔗 Generar enlace'}</span>
-                          </button>
-                          <button
-                            onClick={() => handleRevocarToken(prestamo)}
-                            disabled={revocandoToken === prestamo.id}
-                            className="flex items-center gap-1 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <X className="w-4 h-4" />
-                            <span>{revocandoToken === prestamo.id ? '⏳ Revocando...' : '❌ Revocar'}</span>
-                          </button>
+                          {prestamo.public_token ? (
+                            <>
+                              <button
+                                onClick={() => handleVerPDF(prestamo)}
+                                className="flex items-center gap-1 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300"
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span>📄 Ver PDF</span>
+                              </button>
+                              <button
+                                onClick={() => handleRevocarToken(prestamo)}
+                                disabled={revocandoToken === prestamo.id}
+                                className="flex items-center gap-1 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <X className="w-4 h-4" />
+                                <span>{revocandoToken === prestamo.id ? '⏳ Revocando...' : '❌ Revocar'}</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleGenerarToken(prestamo)}
+                              disabled={generandoToken === prestamo.id}
+                              className="flex items-center gap-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Share2 className="w-4 h-4" />
+                              <span>{generandoToken === prestamo.id ? '⏳ Cargando...' : '🔗 Generar enlace'}</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEliminar(prestamo)}
                             className="flex items-center gap-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
@@ -288,6 +321,18 @@ export default function ListaPrestamosPage() {
             </table>
           </div>
         </div>
+
+        {/* Modal de Naticrédito */}
+        {showNaticreditoModal && prestamoSeleccionado && tokenUrl && (
+          <NaticreditoModal
+            isOpen={showNaticreditoModal}
+            onClose={() => setShowNaticreditoModal(false)}
+            nombreAsociado={prestamoSeleccionado.nombre_prestamista}
+            fechaDesembolso={prestamoSeleccionado.fecha_inicio}
+            montoDesembolsado={prestamoSeleccionado.monto}
+            urlExtracto={tokenUrl}
+          />
+        )}
       </div>
     </div>
   )

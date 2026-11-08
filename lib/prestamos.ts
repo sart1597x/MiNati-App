@@ -92,6 +92,8 @@ export interface Prestamo {
 
   estado: 'activo' | 'pagado'
 
+  public_token?: string
+
   created_at?: string
 
   updated_at?: string

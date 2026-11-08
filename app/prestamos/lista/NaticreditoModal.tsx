@@ -1,7 +1,7 @@
 'use client'
 
-import { X, Download, Copy } from 'lucide-react'
-import { descargarNaticreditoPDF, copiarNaticreditoPDF } from '@/lib/generar-pdf'
+import { X, Download, Share2 } from 'lucide-react'
+import { descargarNaticreditoPDF, compartirNaticreditoPDF } from '@/lib/generar-pdf'
 
 interface NaticreditoModalProps {
   isOpen: boolean
@@ -29,18 +29,16 @@ export default function NaticreditoModal({
     })
   }
 
-  const handleCopiarPDF = async () => {
-    const exito = await copiarNaticreditoPDF({
+  const handleCompartirPDF = async () => {
+    const exito = await compartirNaticreditoPDF({
       nombreAsociado,
       fechaDesembolso,
       montoDesembolsado,
       urlExtracto
     })
 
-    if (exito) {
-      alert('PDF copiado al portapapeles')
-    } else {
-      alert('Tu navegador no permite copiar archivos PDF. Por favor descarga el PDF y adjúntalo manualmente.')
+    if (!exito) {
+      alert('Tu navegador no permite compartir archivos. El PDF se ha descargado automáticamente. Puedes adjuntarlo manualmente.')
     }
   }
 
@@ -110,11 +108,11 @@ export default function NaticreditoModal({
               <span>Descargar PDF</span>
             </button>
             <button
-              onClick={handleCopiarPDF}
+              onClick={handleCompartirPDF}
               className="flex-1 flex items-center justify-center gap-2 bg-[#283c5a] hover:bg-[#3a4e6a] text-white py-3 rounded-xl font-semibold transition-colors"
             >
-              <Copy className="w-5 h-5" />
-              <span>Copiar PDF</span>
+              <Share2 className="w-5 h-5" />
+              <span>Compartir PDF</span>
             </button>
           </div>
         </div>
