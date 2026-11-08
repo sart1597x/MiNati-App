@@ -58,6 +58,11 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // ✅ EXCEPCIÓN: Permitir acceso anónimo al extracto público (Naticrédito)
+  if (request.nextUrl.pathname.startsWith('/prestamos/public/')) {
+    return response
+  }
+
   // ✅ VALIDACIÓN ESTRICTA: Si no hay usuario válido, redirigir a login
   // Esto incluye la ruta raíz / y todas las rutas protegidas
   if (!user || error) {

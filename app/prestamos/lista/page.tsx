@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Home, ArrowLeft, Trash2, Eye } from 'lucide-react'
+import { Home, ArrowLeft, Trash2, Eye, Share2, X } from 'lucide-react'
 import { obtenerPrestamos, calcularSaldoActual, eliminarPrestamo, Prestamo } from '@/lib/prestamos'
+import NaticreditoModal from './NaticreditoModal'
 
 export default function ListaPrestamosPage() {
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
@@ -11,6 +12,11 @@ export default function ListaPrestamosPage() {
   const [saldos, setSaldos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [loadingSaldos, setLoadingSaldos] = useState(false)
+  const [showNaticreditoModal, setShowNaticreditoModal] = useState(false)
+  const [prestamoSeleccionado, setPrestamoSeleccionado] = useState<Prestamo | null>(null)
+  const [tokenUrl, setTokenUrl] = useState<string | null>(null)
+  const [generandoToken, setGenerandoToken] = useState<number | null>(null)
+  const [revocandoToken, setRevocandoToken] = useState<number | null>(null)
 
   useEffect(() => {
     loadPrestamos()
@@ -76,6 +82,68 @@ export default function ListaPrestamosPage() {
     } catch (error) {
       console.error('Error deleting prestamo:', error)
       alert('Error al eliminar el préstamo')
+    }
+  }
+
+  const handleGenerarToken = async (prestamo: Prestamo) => {
+    if (!prestamo.id) return
+
+    try {
+      setGenerandoToken(prestamo.id)
+      const response = await fetch('/api/prestamos/token/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prestamoId: prestamo.id })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        alert(error.error || 'Error al generar el enlace')
+        return
+      }
+
+      const data = await response.json()
+      setTokenUrl(data.publicUrl)
+      setPrestamoSeleccionado(prestamo)
+      setShowNaticreditoModal(true)
+      await loadPrestamos()
+    } catch (error) {
+      console.error('Error generando token:', error)
+      alert('Error al generar el enlace')
+    } finally {
+      setGenerandoToken(null)
+    }
+  }
+
+  const handleRevocarToken = async (prestamo: Prestamo) => {
+    if (!prestamo.id) return
+
+    if (!confirm(`¿Estás seguro de que deseas revocar el enlace público de ${prestamo.nombre_prestamista}?`)) {
+      return
+    }
+
+    try {
+      setRevocandoToken(prestamo.id)
+      const response = await fetch('/api/prestamos/token/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prestamoId: prestamo.id })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        alert(error.error || 'Error al revocar el enlace')
+        return
+      }
+
+      alert('Enlace revocado exitosamente')
+      setTokenUrl(null)
+      await loadPrestamos()
+    } catch (error) {
+      console.error('Error revocando token:', error)
+      alert('Error al revocar el enlace')
+    } finally {
+      setRevocandoToken(null)
     }
   }
 
@@ -188,6 +256,22 @@ export default function ListaPrestamosPage() {
                             <Eye className="w-4 h-4" />
                             <span>🔍 Ver extracto</span>
                           </Link>
+                          <button
+                            onClick={() => handleGenerarToken(prestamo)}
+                            disabled={generandoToken === prestamo.id}
+                            className="flex items-center gap-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Share2 className="w-4 h-4" />
+                            <span>{generandoToken === prestamo.id ? '⏳ Cargando...' : '🔗 Generar enlace'}</span>
+                          </button>
+                          <button
+                            onClick={() => handleRevocarToken(prestamo)}
+                            disabled={revocandoToken === prestamo.id}
+                            className="flex items-center gap-1 text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <X className="w-4 h-4" />
+                            <span>{revocandoToken === prestamo.id ? '⏳ Revocando...' : '❌ Revocar'}</span>
+                          </button>
                           <button
                             onClick={() => handleEliminar(prestamo)}
                             className="flex items-center gap-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
